@@ -1,23 +1,23 @@
 "use client";
 
+import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  CalendarDays,
+  FolderKanban,
+  Home,
+  Lightbulb,
+  LogOut,
+  MapPin,
+  Menu,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import {
-  Home,
-  CalendarDays,
-  MapPin,
-  Users,
-  Menu,
-  X,
-  User,
-  Lightbulb,
-  FolderKanban,
-  LogOut,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useAuth } from "@/components/auth-provider";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -34,11 +34,11 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <header className="sticky top-0 z-50 w-full border-b border-border bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/80">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary via-secondary to-accent">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-linear-to-br from-primary via-secondary to-accent">
             <MapPin className="h-5 w-5 text-white" />
           </div>
           <div className="hidden sm:block">
