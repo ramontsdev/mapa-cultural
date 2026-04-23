@@ -1,0 +1,282 @@
+{
+  "info": {
+    "name": "Backend Auth Example API",
+    "description": "API do backend do Auth Example com todas as rotas de autenticação e usuário",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Script global de pré-requisição",
+          "console.log('Executando requisição para:', pm.request.url.toString());",
+          "",
+          "// Verifica se o token está expirado (opcional)",
+          "const token = pm.collectionVariables.get('accessToken');",
+          "if (token) {",
+          "    try {",
+          "        const payload = JSON.parse(atob(token.split('.')[1]));",
+          "        const now = Math.floor(Date.now() / 1000);",
+          "        if (payload.exp && payload.exp < now) {",
+          "            console.log('Token expirado, removendo...');",
+          "            pm.collectionVariables.unset('accessToken');",
+          "        }",
+          "    } catch (e) {",
+          "        console.log('Erro ao verificar token:', e.message);",
+          "    }",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Script global de teste",
+          "console.log('Status da resposta:', pm.response.code);",
+          "",
+          "// Log de erros comuns",
+          "if (pm.response.code >= 400) {",
+          "    console.log('Erro na resposta:', pm.response.text());",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "🔒 Authentication",
+      "item": [
+        {
+          "name": "📝 Sign Up",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{testName}}\",\n  \"email\": \"{{testEmail}}\",\n  \"document\": \"{{testDocument}}\",\n  \"password\": \"{{testPassword}}\",\n  \"passwordConfirmation\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/sign-up",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "sign-up"]
+            },
+            "description": "Cria um novo usuário no sistema"
+          }
+        },
+        {
+          "name": "🔑 Sign In",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const responseJson = pm.response.json();",
+                  "    if (responseJson.accessToken) {",
+                  "        pm.collectionVariables.set('accessToken', responseJson.accessToken);",
+                  "        console.log('Token salvo automaticamente:', responseJson.accessToken);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/sign-in",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "sign-in"]
+            },
+            "description": "Autentica um usuário e retorna o token de acesso. O token é salvo automaticamente na variável 'accessToken'."
+          }
+        },
+        {
+          "name": "✅ Confirm Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"code\": \"{{verificationCode}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/confirm-email",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "confirm-email"]
+            },
+            "description": "Confirma o email do usuário usando o código de verificação"
+          }
+        },
+        {
+          "name": "🔄 Resend Verification Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/resend-verification-code",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "resend-verification-code"]
+            },
+            "description": "Reenvia o código de verificação para o email do usuário"
+          }
+        },
+        {
+          "name": "🔐 Forgot Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/forgot-password",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "forgot-password"]
+            },
+            "description": "Envia um código de recuperação de senha para o email do usuário"
+          }
+        },
+        {
+          "name": "🔓 Reset Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"code\": \"{{verificationCode}}\",\n  \"password\": \"{{newPassword}}\",\n  \"passwordConfirmation\": \"{{newPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/reset-password",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "reset-password"]
+            },
+            "description": "Redefine a senha do usuário usando o código de recuperação"
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 User",
+      "item": [
+        {
+          "name": "👤 Get Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/me",
+              "host": ["{{BASE_URL}}"],
+              "path": ["api", "me"]
+            },
+            "description": "Retorna os dados do usuário autenticado"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🏥 Health Check",
+      "item": [
+        {
+          "name": "💚 Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            },
+            "description": "Verifica se a API está funcionando corretamente"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "accessToken",
+      "value": "",
+      "description": "Token de acesso JWT obtido automaticamente no Sign In"
+    },
+    {
+      "key": "testName",
+      "value": "Ramon Nunes",
+      "description": "Nome para testes"
+    },
+    {
+      "key": "testEmail",
+      "value": "ramonkjl+test@gmail.com",
+      "description": "Email para testes"
+    },
+    {
+      "key": "testDocument",
+      "value": "84915337022",
+      "description": "CPF/CNPJ para testes"
+    },
+    {
+      "key": "testPassword",
+      "value": "12345678",
+      "description": "Senha para testes"
+    },
+    {
+      "key": "verificationCode",
+      "value": "123456",
+      "description": "Código de verificação (obtido por email)"
+    },
+    {
+      "key": "newPassword",
+      "value": "novaSenha123",
+      "description": "Nova senha para reset"
+    }
+  ]
+}

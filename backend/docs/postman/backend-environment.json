@@ -1,0 +1,79 @@
+{
+  "id": "backend-env",
+  "name": "Backend Auth Example Environment",
+  "values": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:4500",
+      "description": "URL base da API",
+      "enabled": true
+    },
+    {
+      "key": "PORT",
+      "value": "4500",
+      "description": "Porta do servidor",
+      "enabled": true
+    },
+    {
+      "key": "JWT_SECRET",
+      "value": "secret-example",
+      "description": "Chave secreta para JWT",
+      "enabled": true
+    },
+    {
+      "key": "DATABASE_URL",
+      "value": "postgresql://root:root@localhost:5432/auth_example_db",
+      "description": "URL de conexão com o banco de dados",
+      "enabled": true
+    },
+    {
+      "key": "ORIGINS_ALLOWED",
+      "value": "http://localhost:3000",
+      "description": "Origens permitidas para CORS",
+      "enabled": true
+    },
+    {
+      "key": "AWS_REGION",
+      "value": "",
+      "description": "Região da AWS para envio de emails",
+      "enabled": true
+    },
+    {
+      "key": "AWS_ACCESS_KEY_ID",
+      "value": "",
+      "description": "Chave de acesso da AWS",
+      "enabled": true
+    },
+    {
+      "key": "AWS_SECRET_ACCESS_KEY",
+      "value": "",
+      "description": "Chave secreta da AWS",
+      "enabled": true
+    },
+    {
+      "key": "APP_NAME",
+      "value": "Auth Example",
+      "description": "Nome da aplicação",
+      "enabled": true
+    },
+    {
+      "key": "APP_DOMAIN",
+      "value": "example.com",
+      "description": "Domínio da aplicação",
+      "enabled": true
+    },
+    {
+      "key": "APP_EMAIL",
+      "value": "info@example.com",
+      "description": "Email da aplicação",
+      "enabled": true
+    },
+    {
+      "key": "NODE_VERSION",
+      "value": "22.17.1",
+      "description": "Versão do Node.js",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}

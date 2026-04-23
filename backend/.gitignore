@@ -1,0 +1,10 @@
+# directories
+node_modules/
+**/src/**/prisma/generated/
+/dist/
+
+# files
+.env
+
+# OS X
+.DS_Store

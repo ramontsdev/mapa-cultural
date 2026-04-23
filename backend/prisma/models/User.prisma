@@ -1,0 +1,15 @@
+model User {
+  id              String   @id @default(uuid())
+  name            String
+  document        String   @unique @map("document")
+  email           String   @unique
+  isEmailVerified Boolean  @default(false) @map("is_email_verified")
+  password        String   @map("password")
+  phone           String?  @map("phone")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  verificationCodes VerificationCode[]
+
+  @@map("users")
+}

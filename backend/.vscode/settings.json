@@ -1,0 +1,18 @@
+{
+  "material-icon-theme.folders.customClones": [
+    {
+      "name": "usecases",
+      "base": "functions",
+      "color": "purple-500",
+      "folderNames": ["usecases"],
+      "rootFolderNames": ["usecases"]
+    },
+    {
+      "name": "factories",
+      "base": "container",
+      "color": "blue-500",
+      "folderNames": ["factories"],
+      "rootFolderNames": ["factories"]
+    }
+  ]
+}
