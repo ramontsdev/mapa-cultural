@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Filter,
   X,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/components/auth-provider";
 import { getEventosComLugares } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -33,6 +35,7 @@ import {
 } from "@/lib/types";
 
 export default function EventosPage() {
+  const { isAuthenticated } = useAuth();
   const eventos = getEventosComLugares();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
@@ -99,13 +102,22 @@ export default function EventosPage() {
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary p-2">
-              <CalendarDays className="h-6 w-6 text-primary-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-secondary p-2">
+                <CalendarDays className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                Eventos
+              </h1>
             </div>
-            <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-              Eventos
-            </h1>
+
+            {isAuthenticated && (
+              <Button variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar evento
+              </Button>
+            )}
           </div>
 
           {/* View Toggle and Search */}

@@ -42,8 +42,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { useAuth } from "@/components/auth-provider";
 
 export default function CadastroPage() {
+  const { login } = useAuth();
   const router = useRouter();
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -73,6 +75,7 @@ export default function CadastroPage() {
 
   const onCadastroSubmit = (data: CadastroFormData) => {
     console.log("Cadastro:", data);
+    login();
     setSuccess(true);
     setTimeout(() => {
       router.push("/perfil");
@@ -81,6 +84,7 @@ export default function CadastroPage() {
 
   const onLoginSubmit = (data: LoginFormData) => {
     console.log("Login:", data);
+    login();
     setSuccess(true);
     setTimeout(() => {
       router.push("/perfil");

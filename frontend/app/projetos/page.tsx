@@ -12,6 +12,7 @@ import {
   ArrowRight,
   BadgeCheck,
   User,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,6 +32,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useAuth } from "@/components/auth-provider";
 import { mockProjetos } from "@/lib/mock-data";
 import {
   TIPO_PROJETO_LABELS,
@@ -43,6 +45,7 @@ import {
 const FILTER_TODOS = "__todos__";
 
 export default function ProjetosPage() {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recentes");
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
@@ -179,17 +182,30 @@ export default function ProjetosPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {/* Header */}
-        <div className="mb-8 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary">
-            <FolderKanban className="h-6 w-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-            Projetos
-          </h1>
-        </div>
+      {/* Header */}
+      <div className="border-b border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-secondary p-2">
+                <FolderKanban className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                Projetos
+              </h1>
+            </div>
 
+            {isAuthenticated && (
+              <Button variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar projeto
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         {/* Search and Sort */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full max-w-md items-center gap-2">

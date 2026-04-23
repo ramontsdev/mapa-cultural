@@ -13,6 +13,7 @@ import {
   Filter,
   X,
   CheckCircle2,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/components/auth-provider";
 import { mockUsers } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -33,6 +35,7 @@ import {
 } from "@/lib/types";
 
 export default function UsuariosPage() {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa" | "tabelas">(
     "lista"
@@ -81,13 +84,22 @@ export default function UsuariosPage() {
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-accent p-2">
-              <Users className="h-6 w-6 text-accent-foreground" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-secondary p-2">
+                <Users className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                Agentes
+              </h1>
             </div>
-            <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-              Agentes
-            </h1>
+
+            {isAuthenticated && (
+              <Button variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar agente
+              </Button>
+            )}
           </div>
 
           {/* View Toggle and Search */}

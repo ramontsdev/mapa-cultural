@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Award,
   BadgeCheck,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useAuth } from "@/components/auth-provider";
 import {
   mockOportunidades,
   getStatusOportunidade,
@@ -49,6 +51,7 @@ import {
 const FILTER_TODOS = "__todos__";
 
 export default function OportunidadesPage() {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("recentes");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -260,17 +263,30 @@ export default function OportunidadesPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {/* Header */}
-        <div className="mb-8 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary">
-            <Lightbulb className="h-6 w-6 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-            Oportunidades
-          </h1>
-        </div>
+      {/* Header */}
+      <div className="border-b border-border bg-card">
+        <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-secondary p-2">
+                <Lightbulb className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                Oportunidades
+              </h1>
+            </div>
 
+            {isAuthenticated && (
+              <Button variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar oportunidade
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         {/* Search and Sort */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full max-w-md items-center gap-2">

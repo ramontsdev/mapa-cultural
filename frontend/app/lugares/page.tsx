@@ -1,22 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  Building2,
-  MapPin,
-  Search,
-  List,
-  Map,
-  ChevronRight,
-  Filter,
-  X,
-  Accessibility,
-  CheckCircle2,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -25,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { mockLugares } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -33,8 +18,26 @@ import {
   type AreaAtuacao,
   type TipoLugar,
 } from "@/lib/types";
+import {
+  Accessibility,
+  Building2,
+  CheckCircle2,
+  ChevronRight,
+  Filter,
+  List,
+  Map,
+  MapPin,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+import { useAuth } from "@/components/auth-provider";
 
 export default function LugaresPage() {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
   const [apenasOficiais, setApenasOficiais] = useState(false);
@@ -99,13 +102,23 @@ export default function LugaresPage() {
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-secondary p-2">
-              <Building2 className="h-6 w-6 text-secondary-foreground" />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-secondary p-2">
+                <Building2 className="h-6 w-6 text-secondary-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                Espaços
+              </h1>
             </div>
-            <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-              Espaços
-            </h1>
+
+            {isAuthenticated && (
+              <Button variant="outline" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Adicionar espaço
+              </Button>
+            )}
           </div>
 
           {/* View Toggle and Search */}
@@ -313,9 +326,8 @@ export default function LugaresPage() {
 
           {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${
-              showFilters ? "block" : "hidden lg:block"
-            }`}
+            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
+              }`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">

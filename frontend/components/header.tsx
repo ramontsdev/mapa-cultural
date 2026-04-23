@@ -13,9 +13,11 @@ import {
   User,
   Lightbulb,
   FolderKanban,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth-provider";
 
 const navItems = [
   { href: "/", label: "Home", icon: Home },
@@ -28,6 +30,7 @@ const navItems = [
 
 export function Header() {
   const pathname = usePathname();
+  const { isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -69,22 +72,55 @@ export function Header() {
           })}
         </nav>
 
-        {/* Auth Button */}
+        {/* Auth */}
         <div className="flex items-center gap-2">
-          <Link href="/cadastro">
-            <Button className="hidden bg-primary text-primary-foreground hover:bg-primary/90 sm:inline-flex">
-              Entrar
-            </Button>
-          </Link>
-          <Link href="/cadastro">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="sm:hidden"
-            >
-              <User className="h-5 w-5" />
-            </Button>
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link href="/perfil">
+                <Button
+                  variant="outline"
+                  className="hidden gap-2 sm:inline-flex"
+                >
+                  <User className="h-4 w-4" />
+                  Perfil
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                className="hidden sm:inline-flex"
+                onClick={() => logout()}
+              >
+                Sair
+              </Button>
+              <Link href="/perfil" className="sm:hidden">
+                <Button variant="ghost" size="icon" aria-label="Perfil">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="sm:hidden"
+                onClick={() => logout()}
+                aria-label="Sair"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/cadastro">
+                <Button className="hidden bg-primary text-primary-foreground hover:bg-primary/90 sm:inline-flex">
+                  Entrar
+                </Button>
+              </Link>
+              <Link href="/cadastro">
+                <Button variant="ghost" size="icon" className="sm:hidden">
+                  <User className="h-5 w-5" />
+                </Button>
+              </Link>
+            </>
+          )}
 
           {/* Mobile Menu Button */}
           <Button
@@ -126,6 +162,29 @@ export function Header() {
                 </Link>
               );
             })}
+            {isAuthenticated && (
+              <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+                <Link
+                  href="/perfil"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <User className="h-5 w-5" />
+                  Perfil
+                </Link>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start gap-3"
+                  onClick={() => {
+                    logout();
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <LogOut className="h-5 w-5" />
+                  Sair
+                </Button>
+              </div>
+            )}
           </div>
         </nav>
       )}
