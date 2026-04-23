@@ -1,0 +1,254 @@
+// Modelos alinhados ao schema do Mapas Culturais (Doctrine + PostgreSQL/PostGIS).
+// - Tabelas de autenticação deste backend permanecem em `users` / `verification_codes` (modelos `User` / `VerificationCode`).
+// - Mapas usa `usr` para contas da plataforma; não confundir com `User` (JWT/local).
+// - PKs/FKs deste projeto: `String @id @default(uuid())` (como `User`). Import de dump Mapas legado (ints) exige migração ou `db pull` + ajustes.
+// - `location` / `_geo_location`: tipos PostGIS (`point`, `geography`). Prisma expõe como Unsupported até definir estratégia (lat/lng, raw SQL ou extensão).
+// - `event_occurrence.frequency`: tipo custom no Doctrine; se o dump usar domínio próprio, ajuste para Unsupported("...") após introspect.
+
+model Usr {
+  id                 String    @id @default(uuid())
+  authProvider       Int       @map("auth_provider")
+  authUid            String    @map("auth_uid") @db.VarChar(512)
+  email              String    @db.VarChar(255)
+  lastLoginTimestamp DateTime? @map("last_login_timestamp")
+  createTimestamp    DateTime  @map("create_timestamp")
+  status             Int
+  profileId          String?   @unique @map("profile_id")
+
+  profile Agent?  @relation("UsrProfile", fields: [profileId], references: [id], onDelete: SetNull)
+  agents  Agent[]
+
+  @@map("usr")
+}
+
+model Subsite {
+  id              String   @id @default(uuid())
+  name            String   @db.VarChar(255)
+  createTimestamp DateTime @map("create_timestamp")
+  status          Int
+  agentId         String   @map("agent_id")
+  url             String   @db.VarChar(255)
+  aliasUrl        String?  @map("alias_url") @db.VarChar(255)
+  verifiedSeals   Json?    @map("verified_seals")
+  namespace       String   @db.VarChar(50)
+
+  owner Agent @relation("SubsiteOwnerAgent", fields: [agentId], references: [id], onDelete: Cascade)
+
+  agents        Agent[] @relation("AgentSubsite")
+  spaces        Space[]
+  events        Event[]
+  projects      Project[]
+  opportunities Opportunity[]
+  registrations Registration[]
+
+  @@map("subsite")
+}
+
+model Agent {
+  id               String    @id @default(uuid())
+  agentType        Int       @map("type")
+  name             String    @db.VarChar(255)
+  publicLocation   Boolean?  @map("public_location")
+  location         Unsupported("point")
+  geoLocation      Unsupported("geography") @map("_geo_location")
+  shortDescription String?   @map("short_description") @db.Text
+  longDescription  String?   @map("long_description") @db.Text
+  createTimestamp  DateTime  @map("create_timestamp")
+  status           Int
+  parentId         String?   @map("parent_id")
+  userId           String    @map("user_id")
+  updateTimestamp  DateTime? @map("update_timestamp")
+  subsiteId        String?   @map("subsite_id")
+
+  user           Usr       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent         Agent?    @relation("AgentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Agent[]   @relation("AgentHierarchy")
+  profileForUser Usr?      @relation("UsrProfile")
+  subsite        Subsite?  @relation("AgentSubsite", fields: [subsiteId], references: [id], onDelete: SetNull)
+  subsitesOwned  Subsite[] @relation("SubsiteOwnerAgent")
+
+  spaces        Space[]
+  events        Event[]
+  projects      Project[]
+  opportunities Opportunity[] @relation("OpportunityOwnerAgent")
+  registrations Registration[] @relation("RegistrationOwnerAgent")
+
+  @@map("agent")
+}
+
+model Space {
+  id               String    @id @default(uuid())
+  location         Unsupported("point")
+  geoLocation      Unsupported("geography") @map("_geo_location")
+  name             String    @db.VarChar(255)
+  isPublic         Boolean   @map("public")
+  shortDescription String?   @map("short_description") @db.Text
+  longDescription  String?   @map("long_description") @db.Text
+  createTimestamp  DateTime  @map("create_timestamp")
+  status           Int
+  spaceType        Int       @map("type")
+  agentId          String    @map("agent_id")
+  updateTimestamp  DateTime? @map("update_timestamp")
+  subsiteId        String?   @map("subsite_id")
+  parentId         String?   @map("parent_id")
+
+  owner    Agent             @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  subsite  Subsite?          @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+  parent   Space?            @relation("SpaceHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Space[]           @relation("SpaceHierarchy")
+  occurrences EventOccurrence[]
+
+  @@map("space")
+}
+
+model Project {
+  id               String    @id @default(uuid())
+  projectType      Int       @map("type")
+  name             String    @db.VarChar(255)
+  shortDescription String?   @map("short_description") @db.Text
+  longDescription  String?   @map("long_description") @db.Text
+  updateTimestamp  DateTime? @map("update_timestamp")
+  startsOn         DateTime? @map("starts_on")
+  endsOn           DateTime? @map("ends_on")
+  createTimestamp  DateTime  @map("create_timestamp")
+  status           Int
+  subsiteId        String?   @map("subsite_id")
+  parentId         String?   @map("parent_id")
+  agentId          String    @map("agent_id")
+
+  owner   Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  subsite Subsite? @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+  parent  Project? @relation("ProjectHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Project[] @relation("ProjectHierarchy")
+  events  Event[]
+
+  @@map("project")
+}
+
+model Event {
+  id               String    @id @default(uuid())
+  eventType        Int?      @map("type")
+  name             String    @db.VarChar(255)
+  shortDescription String    @default("") @map("short_description") @db.Text
+  longDescription  String?   @map("long_description") @db.Text
+  rules            String?   @map("rules") @db.Text
+  createTimestamp  DateTime  @map("create_timestamp")
+  status           Int
+  agentId          String    @map("agent_id")
+  projectId        String?   @map("project_id")
+  updateTimestamp  DateTime? @map("update_timestamp")
+  subsiteId        String?   @map("subsite_id")
+
+  owner    Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  project  Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  subsite  Subsite? @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+  occurrences EventOccurrence[]
+
+  @@map("event")
+}
+
+model EventOccurrence {
+  id           String    @id @default(uuid())
+  startsOn     DateTime? @map("starts_on") @db.Date
+  endsOn       DateTime? @map("ends_on") @db.Date
+  startsAt     DateTime? @map("starts_at")
+  endsAt       DateTime? @map("ends_at")
+  /// Tipo Doctrine `frequency`; substitua por Unsupported após conferir o tipo real no PostgreSQL.
+  frequency    String?   @map("frequency") @db.Text
+  separation   Int       @default(1)
+  count        Int?
+  until        DateTime? @map("until") @db.Date
+  description  String?   @db.Text
+  price        String?   @db.Text
+  priceInfo    String?   @map("priceInfo") @db.Text
+  timezoneName String    @default("Etc/UTC") @map("timezone_name") @db.Text
+  eventId      String    @map("event_id")
+  spaceId      String    @map("space_id")
+  rule         String    @db.Text
+  status       Int       @default(1)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@map("event_occurrence")
+}
+
+/// Oportunidades Mapas: STI em tabela única; `objectType` + `objectId` apontam para Project/Event/Agent/Space conforme subtipo.
+model Opportunity {
+  id                       String    @id @default(uuid())
+  objectType               String    @map("object_type") @db.Text
+  objectId                 String    @map("object_id")
+  opportunityType          Int       @map("type")
+  name                     String    @db.VarChar(255)
+  shortDescription         String    @map("short_description") @db.Text
+  registrationFrom         DateTime  @map("registration_from")
+  registrationTo           DateTime  @map("registration_to")
+  publishedRegistrations   Boolean   @default(false) @map("published_registrations")
+  registrationCategories   Json?     @map("registration_categories")
+  createTimestamp          DateTime  @map("create_timestamp")
+  updateTimestamp          DateTime? @map("update_timestamp")
+  publishTimestamp         DateTime? @map("publish_timestamp")
+  autoPublish              Boolean   @default(false) @map("auto_publish")
+  status                   Int
+  registrationProponentTypes Json    @map("registration_proponent_types")
+  registrationRanges       Json?     @map("registration_ranges")
+  parentId                 String?   @map("parent_id")
+  agentId                  String    @map("agent_id")
+  subsiteId                String?   @map("subsite_id")
+
+  owner   Agent      @relation("OpportunityOwnerAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  subsite Subsite?   @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+  parent  Opportunity? @relation("OpportunityPhases", fields: [parentId], references: [id], onDelete: Cascade)
+  phases  Opportunity[] @relation("OpportunityPhases")
+
+  registrationSteps RegistrationStep[]
+  registrations     Registration[]
+
+  @@index([objectType, objectId], map: "opportunity_entity_idx")
+  @@map("opportunity")
+}
+
+model RegistrationStep {
+  id              String   @id @default(uuid())
+  name            String
+  displayOrder    Int      @default(0) @map("display_order")
+  opportunityId   String   @map("opportunity_id")
+  metadata        Json
+  createTimestamp DateTime @map("create_timestamp")
+  updateTimestamp DateTime @map("update_timestamp")
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@map("registration_step")
+}
+
+model Registration {
+  id                    String    @id @default(uuid())
+  number                String?   @db.VarChar(24)
+  category              String?   @db.VarChar(255)
+  opportunityId         String    @map("opportunity_id")
+  agentId               String    @map("agent_id")
+  createTimestamp       DateTime  @map("create_timestamp")
+  sentTimestamp         DateTime? @map("sent_timestamp")
+  agentsData            Json?     @map("agents_data")
+  consolidatedResult    String?   @map("consolidated_result") @db.VarChar(255)
+  spaceData             Json?     @map("space_data")
+  status                Int
+  proponentType         String    @map("proponent_type")
+  registrationRange     String    @map("range")
+  valuersExceptionsList Json      @map("valuers_exceptions_list")
+  valuers               Json
+  subsiteId             String?   @map("subsite_id")
+  score                 Float?
+  eligible              Boolean?
+  editableUntil         DateTime? @map("editable_until")
+  editSentTimestamp     DateTime? @map("edit_sent_timestamp")
+  editableFields        Json?     @map("editable_fields")
+  updateTimestamp       DateTime? @map("update_timestamp")
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  owner       Agent       @relation("RegistrationOwnerAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  subsite     Subsite?    @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
+
+  @@map("registration")
+}
