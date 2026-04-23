@@ -1,24 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  MapPin,
-  Mail,
-  Lock,
-  User,
-  Eye,
-  EyeOff,
-  ChevronRight,
-  ArrowRight,
-  CheckCircle2,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -27,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Form,
   FormControl,
@@ -36,16 +18,34 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   cadastroSchema,
   loginSchema,
   type CadastroFormData,
   type LoginFormData,
 } from "@/lib/validations";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  MapPin,
+  User,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
 
 export default function CadastroPage() {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showTermos, setShowTermos] = useState(false);
   const [showPrivacidade, setShowPrivacidade] = useState(false);
@@ -143,18 +143,18 @@ export default function CadastroPage() {
             <CardHeader className="pb-4">
               <div className="flex gap-2">
                 <Button
-                  variant={!isLogin ? "default" : "ghost"}
-                  className="flex-1"
-                  onClick={() => setIsLogin(false)}
-                >
-                  Cadastrar
-                </Button>
-                <Button
-                  variant={isLogin ? "default" : "ghost"}
+                  variant={isLogin ? "default" : "outline"}
                   className="flex-1"
                   onClick={() => setIsLogin(true)}
                 >
                   Entrar
+                </Button>
+                <Button
+                  variant={!isLogin ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setIsLogin(false)}
+                >
+                  Cadastrar
                 </Button>
               </div>
             </CardHeader>
