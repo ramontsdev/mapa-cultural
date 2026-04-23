@@ -40,21 +40,53 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { CreateProjetoDialog } from "@/components/recursos/create-projeto-dialog";
+import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
+import {
+  listProjetosPublicadosUsuario,
+  subscribeMeusProjetosChanged,
+} from "@/lib/meus-projetos-storage";
 
 /** Valor sentinela para o Select (Radix não permite `value=""` em SelectItem). */
 const FILTER_TODOS = "__todos__";
 
 export default function ProjetosPage() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [storageTick, setStorageTick] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
   const [showOnlyOficiais, setShowOnlyOficiais] = useState(false);
 
+  useEffect(
+    () => subscribeMeusProjetosChanged(() => setStorageTick((t) => t + 1)),
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("criar") === "1") {
+      setCreateOpen(true);
+      router.replace("/projetos", { scroll: false });
+    }
+  }, [isAuthenticated, router]);
+
   const filteredProjetos = useMemo(() => {
-    let result = [...mockProjetos];
+    void storageTick;
+    const pub = listProjetosPublicadosUsuario();
+    const byId = new Map(mockProjetos.map((p) => [p.id, p]));
+    for (const p of pub) {
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+    let result = [...byId.values()];
 
     // Search filter
     if (searchQuery) {
@@ -87,7 +119,7 @@ export default function ProjetosPage() {
     result.sort((a, b) => compareListSort(a, b, sortBy));
 
     return result;
-  }, [searchQuery, sortBy, tipoFilter, areaFilter, showOnlyOficiais]);
+  }, [searchQuery, sortBy, tipoFilter, areaFilter, showOnlyOficiais, storageTick]);
 
   const clearFilters = () => {
     setTipoFilter(FILTER_TODOS);
@@ -190,7 +222,11 @@ export default function ProjetosPage() {
             </div>
 
             {isAuthenticated && (
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar projeto
               </Button>
@@ -390,6 +426,31 @@ export default function ProjetosPage() {
           </aside>
         </div>
       </div>
+
+      <CreateProjetoDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCriadoRascunho={(id) => {
+          setLastCreatedId(id);
+          setDraftDialogOpen(true);
+        }}
+        onCriadoPublicado={(id) => router.push(`/projetos/${id}`)}
+      />
+
+      <DraftCreatedDialog
+        open={draftDialogOpen}
+        onOpenChange={setDraftDialogOpen}
+        titulo="Projeto criado em rascunho"
+        nomeSecaoMeus="Meus projetos"
+        verItemLabel="Ver projeto"
+        onVer={() => {
+          if (lastCreatedId) router.push(`/projetos/${lastCreatedId}`);
+        }}
+        onCompletarDepois={() => router.push("/projetos/meus")}
+        onCompletarInformacoes={() => {
+          if (lastCreatedId) router.push(`/projetos/${lastCreatedId}/editar`);
+        }}
+      />
     </div>
   );
 }

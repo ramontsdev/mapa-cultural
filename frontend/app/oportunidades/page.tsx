@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChevronRight,
   Search,
@@ -36,6 +37,12 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth-provider";
+import { CreateOportunidadeDialog } from "@/components/recursos/create-oportunidade-dialog";
+import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
+import {
+  listOportunidadesPublicadasUsuario,
+  subscribeMeusOportunidadesChanged,
+} from "@/lib/meus-oportunidades-storage";
 import { compareListSort, type ListSortBy } from "@/lib/list-sort";
 import {
   mockOportunidades,
@@ -55,6 +62,11 @@ type SortOportunidades = ListSortBy | "encerramento";
 
 export default function OportunidadesPage() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [storageTick, setStorageTick] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOportunidades>("recentes");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -62,8 +74,28 @@ export default function OportunidadesPage() {
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
   const [showOnlyOficiais, setShowOnlyOficiais] = useState(false);
 
+  useEffect(
+    () => subscribeMeusOportunidadesChanged(() => setStorageTick((t) => t + 1)),
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("criar") === "1") {
+      setCreateOpen(true);
+      router.replace("/oportunidades", { scroll: false });
+    }
+  }, [isAuthenticated, router]);
+
   const filteredOportunidades = useMemo(() => {
-    let result = [...mockOportunidades];
+    void storageTick;
+    const pub = listOportunidadesPublicadasUsuario();
+    const byId = new Map(mockOportunidades.map((o) => [o.id, o]));
+    for (const o of pub) {
+      if (!byId.has(o.id)) byId.set(o.id, o);
+    }
+    let result = [...byId.values()];
 
     // Search filter
     if (searchQuery) {
@@ -117,6 +149,7 @@ export default function OportunidadesPage() {
     tipoFilter,
     areaFilter,
     showOnlyOficiais,
+    storageTick,
   ]);
 
   const clearFilters = () => {
@@ -277,7 +310,11 @@ export default function OportunidadesPage() {
             </div>
 
             {isAuthenticated && (
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar oportunidade
               </Button>
@@ -486,6 +523,32 @@ export default function OportunidadesPage() {
           </aside>
         </div>
       </div>
+
+      <CreateOportunidadeDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCriadoRascunho={(id) => {
+          setLastCreatedId(id);
+          setDraftDialogOpen(true);
+        }}
+        onCriadoPublicado={(id) => router.push(`/oportunidades/${id}`)}
+      />
+
+      <DraftCreatedDialog
+        open={draftDialogOpen}
+        onOpenChange={setDraftDialogOpen}
+        titulo="Oportunidade criada em rascunho"
+        nomeSecaoMeus="Minhas oportunidades"
+        verItemLabel="Ver oportunidade"
+        onVer={() => {
+          if (lastCreatedId) router.push(`/oportunidades/${lastCreatedId}`);
+        }}
+        onCompletarDepois={() => router.push("/oportunidades/meus")}
+        onCompletarInformacoes={() => {
+          if (lastCreatedId)
+            router.push(`/oportunidades/${lastCreatedId}/editar`);
+        }}
+      />
     </div>
   );
 }

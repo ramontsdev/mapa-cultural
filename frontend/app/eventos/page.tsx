@@ -12,7 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getEventosComLugares } from "@/lib/mock-data";
+import { CreateEventoDialog } from "@/components/recursos/create-evento-dialog";
+import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
+import { mockEventos, mockLugares } from "@/lib/mock-data";
+import { resolveLugarById } from "@/lib/meus-espacos-storage";
+import {
+  listEventosPublicadosUsuario,
+  subscribeMeusEventosChanged,
+} from "@/lib/meus-eventos-storage";
 import {
   AREA_ATUACAO_LABELS,
   CLASSIFICACAO_LABELS,
@@ -24,7 +31,7 @@ import {
   ChevronRight,
   Filter,
   List,
-  Map,
+  Map as MapIcon,
   MapPin,
   Plus,
   Search,
@@ -32,7 +39,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 type SortEventos = "recentes" | "antigos" | "nome" | "nome-desc";
 
@@ -71,7 +79,11 @@ function compareEventosForSort(
 
 export default function EventosPage() {
   const { isAuthenticated } = useAuth();
-  const eventos = getEventosComLugares();
+  const router = useRouter();
+  const [storageTick, setStorageTick] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
   const [apenasOficiais, setApenasOficiais] = useState(false);
@@ -79,6 +91,35 @@ export default function EventosPage() {
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortEventos>("recentes");
+
+  useEffect(() => subscribeMeusEventosChanged(() => setStorageTick((t) => t + 1)), []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("criar") === "1") {
+      setCreateOpen(true);
+      router.replace("/eventos", { scroll: false });
+    }
+  }, [isAuthenticated, router]);
+
+  const eventos = useMemo(() => {
+    void storageTick;
+    const pub = listEventosPublicadosUsuario();
+    const byId = new Map(mockEventos.map((e) => [e.id, e]));
+    for (const e of pub) {
+      if (!byId.has(e.id)) byId.set(e.id, e);
+    }
+    return [...byId.values()].map((ev) => ({
+      ...ev,
+      lugar:
+        ev.lugarId != null && ev.lugarId !== ""
+          ? mockLugares.find((l) => l.id === ev.lugarId) ??
+            resolveLugarById(ev.lugarId) ??
+            undefined
+          : undefined,
+    }));
+  }, [storageTick]);
 
   const filteredEventos = useMemo(() => {
     return eventos.filter((evento) => {
@@ -153,7 +194,11 @@ export default function EventosPage() {
             </div>
 
             {isAuthenticated && (
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar evento
               </Button>
@@ -182,7 +227,7 @@ export default function EventosPage() {
                   onClick={() => setViewMode("mapa")}
                   className="gap-2"
                 >
-                  <Map className="h-4 w-4" />
+                  <MapIcon className="h-4 w-4" />
                   Mapa
                 </Button>
               </div>
@@ -375,7 +420,7 @@ export default function EventosPage() {
               </div>
             ) : (
               <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
-                <Map className="mx-auto h-16 w-16 text-muted-foreground/50" />
+                <MapIcon className="mx-auto h-16 w-16 text-muted-foreground/50" />
                 <p className="mt-4 text-muted-foreground">
                   Visualização em mapa será implementada com integração de mapas
                 </p>
@@ -481,6 +526,31 @@ export default function EventosPage() {
           </aside>
         </div>
       </div>
+
+      <CreateEventoDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCriadoRascunho={(id) => {
+          setLastCreatedId(id);
+          setDraftDialogOpen(true);
+        }}
+        onCriadoPublicado={(id) => router.push(`/eventos/${id}`)}
+      />
+
+      <DraftCreatedDialog
+        open={draftDialogOpen}
+        onOpenChange={setDraftDialogOpen}
+        titulo="Evento criado em rascunho"
+        nomeSecaoMeus="Meus eventos"
+        verItemLabel="Ver evento"
+        onVer={() => {
+          if (lastCreatedId) router.push(`/eventos/${lastCreatedId}`);
+        }}
+        onCompletarDepois={() => router.push("/eventos/meus")}
+        onCompletarInformacoes={() => {
+          if (lastCreatedId) router.push(`/eventos/${lastCreatedId}/editar`);
+        }}
+      />
     </div>
   );
 }

@@ -119,9 +119,25 @@ export interface Lugar {
   email?: string;
   website?: string;
   horarioFuncionamento?: string;
+  redesSociais?: {
+    instagram?: string;
+    twitter?: string;
+    facebook?: string;
+    youtube?: string;
+  };
   createdById: string;
   createdAt: string;
   isOficial: boolean;
+}
+
+/** Espaços criados pelo usuário (persistência local até existir API). */
+export type MeuEspacoStatus = "draft" | "published";
+
+export interface MeuEspacoRecord {
+  id: string;
+  status: MeuEspacoStatus;
+  updatedAt: string;
+  lugar: Lugar;
 }
 
 export type ClassificacaoEtaria = "livre" | "10" | "12" | "14" | "16" | "18";
@@ -240,3 +256,31 @@ export interface Projeto {
   createdById: string;
   createdAt: string;
 }
+
+export type MeuEventoRecord = {
+  id: string;
+  status: MeuEspacoStatus;
+  updatedAt: string;
+  evento: Evento;
+};
+
+export type MeuOportunidadeRecord = {
+  id: string;
+  status: MeuEspacoStatus;
+  updatedAt: string;
+  oportunidade: Oportunidade;
+};
+
+export type MeuProjetoRecord = {
+  id: string;
+  status: MeuEspacoStatus;
+  updatedAt: string;
+  projeto: Projeto;
+};
+
+export type MeuAgenteRecord = {
+  id: string;
+  status: MeuEspacoStatus;
+  updatedAt: string;
+  agente: User;
+};

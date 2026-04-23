@@ -23,7 +23,7 @@ import {
   Filter,
   Grid3X3,
   List,
-  Map,
+  Map as MapIcon,
   Plus,
   Search,
   Users,
@@ -31,10 +31,22 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { CreateAgenteDialog } from "@/components/recursos/create-agente-dialog";
+import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
+import {
+  listAgentesPublicadosUsuario,
+  subscribeMeusAgentesChanged,
+} from "@/lib/meus-agentes-storage";
 
 export default function UsuariosPage() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [storageTick, setStorageTick] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa" | "tabelas">(
     "lista"
@@ -44,8 +56,29 @@ export default function UsuariosPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
 
+  useEffect(
+    () => subscribeMeusAgentesChanged(() => setStorageTick((t) => t + 1)),
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("criar") === "1") {
+      setCreateOpen(true);
+      router.replace("/usuarios", { scroll: false });
+    }
+  }, [isAuthenticated, router]);
+
   const filteredUsuarios = useMemo(() => {
-    return mockUsers.filter((usuario) => {
+    void storageTick;
+    const pub = listAgentesPublicadosUsuario();
+    const byId = new Map(mockUsers.map((u) => [u.id, u]));
+    for (const u of pub) {
+      if (!byId.has(u.id)) byId.set(u.id, u);
+    }
+    const base = [...byId.values()];
+    return base.filter((usuario) => {
       const matchesSearch =
         usuario.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
         usuario.biografia?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -58,7 +91,7 @@ export default function UsuariosPage() {
 
       return matchesSearch && matchesTipo && matchesArea;
     });
-  }, [searchQuery, tipoAtuacao, areaAtuacao]);
+  }, [searchQuery, tipoAtuacao, areaAtuacao, storageTick]);
 
   const sortedUsuarios = useMemo(
     () => sortListByMode(filteredUsuarios, sortBy),
@@ -101,7 +134,11 @@ export default function UsuariosPage() {
             </div>
 
             {isAuthenticated && (
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar agente
               </Button>
@@ -130,7 +167,7 @@ export default function UsuariosPage() {
                   onClick={() => setViewMode("mapa")}
                   className="gap-2"
                 >
-                  <Map className="h-4 w-4" />
+                  <MapIcon className="h-4 w-4" />
                   Mapa
                 </Button>
                 <Button
@@ -316,7 +353,7 @@ export default function UsuariosPage() {
               <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
                 {viewMode === "mapa" ? (
                   <>
-                    <Map className="mx-auto h-16 w-16 text-muted-foreground/50" />
+                    <MapIcon className="mx-auto h-16 w-16 text-muted-foreground/50" />
                     <p className="mt-4 text-muted-foreground">
                       Visualização em mapa será implementada com integração de
                       mapas
@@ -405,6 +442,31 @@ export default function UsuariosPage() {
           </aside>
         </div>
       </div>
+
+      <CreateAgenteDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCriadoRascunho={(id) => {
+          setLastCreatedId(id);
+          setDraftDialogOpen(true);
+        }}
+        onCriadoPublicado={(id) => router.push(`/usuarios/${id}`)}
+      />
+
+      <DraftCreatedDialog
+        open={draftDialogOpen}
+        onOpenChange={setDraftDialogOpen}
+        titulo="Agente criado em rascunho"
+        nomeSecaoMeus="Meus agentes"
+        verItemLabel="Ver perfil"
+        onVer={() => {
+          if (lastCreatedId) router.push(`/usuarios/${lastCreatedId}`);
+        }}
+        onCompletarDepois={() => router.push("/usuarios/meus")}
+        onCompletarInformacoes={() => {
+          if (lastCreatedId) router.push(`/usuarios/${lastCreatedId}/editar`);
+        }}
+      />
     </div>
   );
 }

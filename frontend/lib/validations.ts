@@ -68,6 +68,246 @@ export const lugarSchema = z.object({
 
 export type LugarFormData = z.infer<typeof lugarSchema>;
 
+const tipoLugarZ = z.enum([
+  "centro_cultural",
+  "teatro",
+  "museu",
+  "galeria",
+  "praca",
+  "biblioteca",
+  "cinema",
+  "espaco_multiuso",
+  "bar_cultural",
+  "outro",
+]);
+
+const areaAtuacaoZ = z.enum([
+  "musica",
+  "danca",
+  "teatro",
+  "artes_visuais",
+  "literatura",
+  "audiovisual",
+  "cultura_popular",
+  "patrimonio_cultural",
+  "gastronomia",
+  "artesanato",
+]);
+
+/** Formulário rápido do modal “Criar espaço”. */
+export const criarEspacoRapidoSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  tipo: tipoLugarZ,
+  areasAtuacao: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de atuação"),
+  descricao: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres na descrição")
+    .max(400, "Máximo 400 caracteres"),
+});
+
+export type CriarEspacoRapidoFormData = z.infer<typeof criarEspacoRapidoSchema>;
+
+/** Edição completa do espaço (rascunho ou publicado). */
+export const espacoEdicaoFormSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  tipo: tipoLugarZ,
+  descricao: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres")
+    .max(2000, "Máximo 2000 caracteres"),
+  areasAtuacao: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de atuação"),
+  website: z.string().url("URL inválida").optional().or(z.literal("")),
+  logradouro: z.string(),
+  numero: z.string(),
+  bairro: z.string(),
+  cidade: z.string(),
+  estado: z.string(),
+  cep: z.string(),
+  acessibilidade: z.boolean(),
+  telefone: z.string().optional(),
+  email: z.string().email("Email inválido").optional().or(z.literal("")),
+  horarioFuncionamento: z.string().optional(),
+  lat: z.string().optional(),
+  lng: z.string().optional(),
+  instagram: z.string().optional(),
+  facebook: z.string().optional(),
+  twitter: z.string().optional(),
+  youtube: z.string().optional(),
+});
+
+export type EspacoEdicaoFormData = z.infer<typeof espacoEdicaoFormSchema>;
+
+export function validateEspacoForPublish(
+  data: EspacoEdicaoFormData
+): string | null {
+  if (data.logradouro.trim().length < 3) {
+    return "Informe o logradouro para publicar.";
+  }
+  if (data.cidade.trim().length < 2) {
+    return "Informe o município para publicar.";
+  }
+  if (data.estado.trim().length !== 2) {
+    return "Informe a UF com 2 letras para publicar.";
+  }
+  if (data.cep.replace(/\D/g, "").length < 8) {
+    return "Informe um CEP válido para publicar.";
+  }
+  return null;
+}
+
+const classificacaoEtariaZ = z.enum([
+  "livre",
+  "10",
+  "12",
+  "14",
+  "16",
+  "18",
+]);
+
+const tipoOportunidadeZ = z.enum([
+  "edital",
+  "concurso",
+  "premio",
+  "oficina",
+  "residencia",
+  "bolsa",
+  "patrocinio",
+]);
+
+const tipoProjetoZ = z.enum([
+  "intercambio_cultural",
+  "oficina",
+  "festival",
+  "exposicao",
+  "producao",
+  "pesquisa",
+  "formacao",
+]);
+
+export const criarEventoRapidoSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  descricao: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres")
+    .max(400, "Máximo 400 caracteres"),
+  dataInicio: z.string().min(1, "Informe a data do evento"),
+  horario: z.string().min(1, "Informe o horário"),
+  classificacao: classificacaoEtariaZ,
+  entrada: z.enum(["gratuito", "pago"]),
+  preco: z.string().optional(),
+  areasAtuacao: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de atuação"),
+});
+
+export type CriarEventoRapidoFormData = z.infer<typeof criarEventoRapidoSchema>;
+
+export const criarOportunidadeRapidoSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  tipo: tipoOportunidadeZ,
+  descricao: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres")
+    .max(400, "Máximo 400 caracteres"),
+  dataInscricaoInicio: z.string().min(1, "Informe a data de início"),
+  dataInscricaoFim: z.string().min(1, "Informe a data de fim"),
+  areasInteresse: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de interesse"),
+});
+
+export type CriarOportunidadeRapidoFormData = z.infer<
+  typeof criarOportunidadeRapidoSchema
+>;
+
+export const criarProjetoRapidoSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  tipo: tipoProjetoZ,
+  descricao: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres")
+    .max(400, "Máximo 400 caracteres"),
+  responsavel: z.string().min(2, "Informe o responsável"),
+  areasAtuacao: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de atuação"),
+});
+
+export type CriarProjetoRapidoFormData = z.infer<
+  typeof criarProjetoRapidoSchema
+>;
+
+export const criarAgenteRapidoSchema = z.object({
+  nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  tipoAtuacao: z.enum(["individual", "coletivo"]),
+  email: z.string().email("E-mail inválido").optional().or(z.literal("")),
+  biografia: z
+    .string()
+    .min(10, "Use pelo menos 10 caracteres")
+    .max(500, "Máximo 500 caracteres"),
+  areasAtuacao: z
+    .array(areaAtuacaoZ)
+    .min(1, "Adicione pelo menos uma área de atuação"),
+});
+
+export type CriarAgenteRapidoFormData = z.infer<typeof criarAgenteRapidoSchema>;
+
+/** Edição de evento salvo em “Meus eventos” (local). */
+export const meuEventoEdicaoSchema = criarEventoRapidoSchema.extend({
+  dataFim: z.string().optional(),
+  lugarId: z.string().optional(),
+  tags: z.string().optional(),
+  imagem: z
+    .string()
+    .optional()
+    .refine(
+      (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
+      "URL da imagem inválida"
+    ),
+});
+
+export type MeuEventoEdicaoFormData = z.infer<typeof meuEventoEdicaoSchema>;
+
+/** Edição de oportunidade (local). */
+export const meuOportunidadeEdicaoSchema = criarOportunidadeRapidoSchema.extend({
+  requisitos: z.string().max(2000).optional(),
+  valorPremio: z.string().optional(),
+  link: z.string().url("URL inválida").optional().or(z.literal("")),
+});
+
+export type MeuOportunidadeEdicaoFormData = z.infer<
+  typeof meuOportunidadeEdicaoSchema
+>;
+
+/** Edição de projeto (local). */
+export const meuProjetoEdicaoSchema = criarProjetoRapidoSchema.extend({
+  dataInicio: z.string().optional(),
+  dataFim: z.string().optional(),
+  parceiros: z.string().optional(),
+  imagem: z
+    .string()
+    .optional()
+    .refine(
+      (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
+      "URL da imagem inválida"
+    ),
+});
+
+export type MeuProjetoEdicaoFormData = z.infer<typeof meuProjetoEdicaoSchema>;
+
+/** Edição de agente (local). */
+export const meuAgenteEdicaoSchema = criarAgenteRapidoSchema.extend({
+  cidade: z.string().optional(),
+  estado: z.string().max(2).optional(),
+  oQueFaz: z.string().max(200).optional(),
+});
+
+export type MeuAgenteEdicaoFormData = z.infer<typeof meuAgenteEdicaoSchema>;
+
 // Schema para evento
 export const eventoSchema = z.object({
   nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),

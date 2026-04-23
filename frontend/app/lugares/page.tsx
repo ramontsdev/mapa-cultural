@@ -12,7 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CreateEspacoDialog } from "@/components/lugares/create-espaco-dialog";
+import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
 import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
+import {
+  listLugaresPublicadosUsuario,
+  subscribeMeusEspacosChanged,
+} from "@/lib/meus-espacos-storage";
 import { mockLugares } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -35,10 +41,16 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 export default function LugaresPage() {
   const { isAuthenticated } = useAuth();
+  const router = useRouter();
+  const [storageTick, setStorageTick] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
   const [apenasOficiais, setApenasOficiais] = useState(false);
@@ -48,8 +60,24 @@ export default function LugaresPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
 
+  useEffect(() => subscribeMeusEspacosChanged(() => setStorageTick((t) => t + 1)), []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !isAuthenticated) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("criar") === "1") {
+      setCreateOpen(true);
+      router.replace("/lugares", { scroll: false });
+    }
+  }, [isAuthenticated, router]);
+
+  const todosLugares = useMemo(() => {
+    void storageTick;
+    return [...mockLugares, ...listLugaresPublicadosUsuario()];
+  }, [storageTick]);
+
   const filteredLugares = useMemo(() => {
-    return mockLugares.filter((lugar) => {
+    return todosLugares.filter((lugar) => {
       const matchesSearch =
         lugar.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
         lugar.descricao.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -71,6 +99,7 @@ export default function LugaresPage() {
       );
     });
   }, [
+    todosLugares,
     searchQuery,
     apenasOficiais,
     possuiAcessibilidade,
@@ -122,7 +151,11 @@ export default function LugaresPage() {
             </div>
 
             {isAuthenticated && (
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <Plus className="h-4 w-4" />
                 Adicionar espaço
               </Button>
@@ -443,6 +476,33 @@ export default function LugaresPage() {
           </aside>
         </div>
       </div>
+
+      <CreateEspacoDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCriadoRascunho={(id) => {
+          setLastCreatedId(id);
+          setDraftDialogOpen(true);
+        }}
+        onCriadoPublicado={(id) => {
+          router.push(`/lugares/${id}`);
+        }}
+      />
+
+      <DraftCreatedDialog
+        open={draftDialogOpen}
+        onOpenChange={setDraftDialogOpen}
+        titulo="Espaço criado em rascunho"
+        nomeSecaoMeus="Meus espaços"
+        verItemLabel="Ver espaço"
+        onVer={() => {
+          if (lastCreatedId) router.push(`/lugares/${lastCreatedId}`);
+        }}
+        onCompletarDepois={() => router.push("/lugares/meus")}
+        onCompletarInformacoes={() => {
+          if (lastCreatedId) router.push(`/lugares/${lastCreatedId}/editar`);
+        }}
+      />
     </div>
   );
 }
