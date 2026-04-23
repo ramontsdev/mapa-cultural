@@ -3,7 +3,12 @@ import express, { NextFunction, Request, Response } from 'express';
 import { expressCors } from '@/main/adapters/express/expressCorsAdapter';
 
 import { env } from './config/env';
+import { agentRoutes } from './routes/agentRoutes';
 import { authRoutes } from './routes/authRoutes';
+import { eventRoutes } from './routes/eventRoutes';
+import { opportunityRoutes } from './routes/opportunityRoutes';
+import { projectRoutes } from './routes/projectRoutes';
+import { spaceRoutes } from './routes/spaceRoutes';
 import { userRoutes } from './routes/userRoutes';
 
 const app = express();
@@ -22,7 +27,7 @@ app.use((error: Error, _request: Request, response: Response, _next: NextFunctio
   response.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.use('/api', [authRoutes, userRoutes]);
+app.use('/api', [authRoutes, userRoutes, agentRoutes, spaceRoutes, projectRoutes, eventRoutes, opportunityRoutes]);
 
 app.listen(env.port, () => {
   console.info(`Server is running on port ${env.port}`);

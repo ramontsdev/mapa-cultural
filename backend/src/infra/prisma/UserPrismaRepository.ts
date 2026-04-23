@@ -8,6 +8,7 @@ import { UpdatePasswordDTO } from '@/domain/usecases/authentication/UpdatePasswo
 import { CreateUserDTO } from '@/domain/usecases/user/CreateUser';
 import { UpdateUserDto } from '@/domain/usecases/user/UpdateUser';
 
+import { createAgentProfileForUser } from './createAgentProfileForUser';
 import { PrismaClient } from './prismaClient';
 
 export class UserPrismaRepository implements
@@ -19,7 +20,16 @@ export class UserPrismaRepository implements
   constructor(private readonly prismaClient: PrismaClient) {}
 
   async create(data: CreateUserDTO): Promise<UserModel> {
-    const user = await this.prismaClient.user.create({ data });
+    const user = await this.prismaClient.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({ data });
+
+      await createAgentProfileForUser({
+        tx: tx as unknown as PrismaClient,
+        user: { id: createdUser.id, name: createdUser.name, email: createdUser.email },
+      });
+
+      return createdUser;
+    });
 
     return user;
   }

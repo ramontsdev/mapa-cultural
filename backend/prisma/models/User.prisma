@@ -10,6 +10,7 @@ model User {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   verificationCodes VerificationCode[]
+  profileAgent       Agent? @relation("AppUserProfileAgent")
 
   @@map("users")
 }

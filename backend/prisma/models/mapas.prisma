@@ -2,7 +2,8 @@
 // - Tabelas de autenticação deste backend permanecem em `users` / `verification_codes` (modelos `User` / `VerificationCode`).
 // - Mapas usa `usr` para contas da plataforma; não confundir com `User` (JWT/local).
 // - PKs/FKs deste projeto: `String @id @default(uuid())` (como `User`). Import de dump Mapas legado (ints) exige migração ou `db pull` + ajustes.
-// - `location` / `_geo_location`: tipos PostGIS (`point`, `geography`). Prisma expõe como Unsupported até definir estratégia (lat/lng, raw SQL ou extensão).
+// - `location`: tipo `point` nativo do PostgreSQL.
+// - `_geo_location`: no Mapas real é `geography` (PostGIS). Aqui `TEXT` para migrar sem PostGIS; com PostGIS instalado, pode `ALTER COLUMN ... TYPE geography` ou trocar o campo para Unsupported("geography") e gerar nova migração.
 // - `event_occurrence.frequency`: tipo custom no Doctrine; se o dump usar domínio próprio, ajuste para Unsupported("...") após introspect.
 
 model Usr {
@@ -46,11 +47,12 @@ model Subsite {
 
 model Agent {
   id               String    @id @default(uuid())
+  appUserId         String?   @unique @map("app_user_id")
   agentType        Int       @map("type")
   name             String    @db.VarChar(255)
   publicLocation   Boolean?  @map("public_location")
   location         Unsupported("point")
-  geoLocation      Unsupported("geography") @map("_geo_location")
+  geoLocation      String    @map("_geo_location") @db.Text
   shortDescription String?   @map("short_description") @db.Text
   longDescription  String?   @map("long_description") @db.Text
   createTimestamp  DateTime  @map("create_timestamp")
@@ -61,6 +63,7 @@ model Agent {
   subsiteId        String?   @map("subsite_id")
 
   user           Usr       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appUser        User?     @relation("AppUserProfileAgent", fields: [appUserId], references: [id], onDelete: Cascade)
   parent         Agent?    @relation("AgentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children       Agent[]   @relation("AgentHierarchy")
   profileForUser Usr?      @relation("UsrProfile")
@@ -79,7 +82,7 @@ model Agent {
 model Space {
   id               String    @id @default(uuid())
   location         Unsupported("point")
-  geoLocation      Unsupported("geography") @map("_geo_location")
+  geoLocation      String    @map("_geo_location") @db.Text
   name             String    @db.VarChar(255)
   isPublic         Boolean   @map("public")
   shortDescription String?   @map("short_description") @db.Text
