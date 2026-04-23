@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,7 +43,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useAuth } from "@/components/auth-provider";
 
 export default function CadastroPage() {
   const { login } = useAuth();
@@ -134,7 +134,7 @@ export default function CadastroPage() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-primary via-secondary to-accent">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-linear-to-br from-primary via-secondary to-accent">
               <MapPin className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-foreground">Mapa Cultural</h1>

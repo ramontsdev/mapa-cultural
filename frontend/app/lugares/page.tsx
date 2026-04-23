@@ -255,7 +255,7 @@ export default function LugaresPage() {
                           </div>
 
                           <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
-                            <MapPin className="h-4 w-4 flex-shrink-0" />
+                            <MapPin className="h-4 w-4 shrink-0" />
                             {lugar.endereco.logradouro}, {lugar.endereco.numero}{" "}
                             - {lugar.endereco.bairro} -{" "}
                             {lugar.endereco.cidade}/{lugar.endereco.estado} -
