@@ -1,21 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  CalendarDays,
-  MapPin,
-  Search,
-  List,
-  Map,
-  ChevronRight,
-  Filter,
-  X,
-  Plus,
-} from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -24,8 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useAuth } from "@/components/auth-provider";
 import { getEventosComLugares } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -33,6 +19,55 @@ import {
   type AreaAtuacao,
   type ClassificacaoEtaria,
 } from "@/lib/types";
+import {
+  CalendarDays,
+  ChevronRight,
+  Filter,
+  List,
+  Map,
+  MapPin,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+type SortEventos = "recentes" | "antigos" | "nome" | "nome-desc";
+
+function compareEventosForSort(
+  a: { dataInicio: string; nome: string },
+  b: { dataInicio: string; nome: string },
+  sortBy: SortEventos
+): number {
+  switch (sortBy) {
+    case "recentes": {
+      const da = new Date(a.dataInicio).getTime();
+      const db = new Date(b.dataInicio).getTime();
+      if (da !== db) return da - db;
+      return a.nome.localeCompare(b.nome, "pt-BR");
+    }
+    case "antigos": {
+      const da = new Date(a.dataInicio).getTime();
+      const db = new Date(b.dataInicio).getTime();
+      if (da !== db) return db - da;
+      return a.nome.localeCompare(b.nome, "pt-BR");
+    }
+    case "nome": {
+      const byName = a.nome.localeCompare(b.nome, "pt-BR");
+      if (byName !== 0) return byName;
+      return new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime();
+    }
+    case "nome-desc": {
+      const byName = b.nome.localeCompare(a.nome, "pt-BR");
+      if (byName !== 0) return byName;
+      return new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime();
+    }
+    default:
+      return 0;
+  }
+}
 
 export default function EventosPage() {
   const { isAuthenticated } = useAuth();
@@ -43,6 +78,7 @@ export default function EventosPage() {
   const [classificacao, setClassificacao] = useState<string>("todos");
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<SortEventos>("recentes");
 
   const filteredEventos = useMemo(() => {
     return eventos.filter((evento) => {
@@ -62,26 +98,30 @@ export default function EventosPage() {
     });
   }, [eventos, searchQuery, apenasOficiais, classificacao, areaAtuacao]);
 
-  // Agrupar eventos por data
+  // Ordenar e agrupar por data (ordem dos blocos segue a ordenação escolhida)
   const eventosAgrupados = useMemo(() => {
+    const sorted = [...filteredEventos].sort((a, b) =>
+      compareEventosForSort(a, b, sortBy)
+    );
     const grupos: Record<string, typeof filteredEventos> = {};
-    filteredEventos.forEach((evento) => {
+    const dateOrder: string[] = [];
+    sorted.forEach((evento) => {
       const data = evento.dataInicio;
       if (!grupos[data]) {
         grupos[data] = [];
+        dateOrder.push(data);
       }
       grupos[data].push(evento);
     });
-    return Object.entries(grupos).sort(
-      ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
-    );
-  }, [filteredEventos]);
+    return dateOrder.map((data) => [data, grupos[data]] as const);
+  }, [filteredEventos, sortBy]);
 
   const clearFilters = () => {
     setSearchQuery("");
     setApenasOficiais(false);
     setClassificacao("todos");
     setAreaAtuacao("todos");
+    setSortBy("recentes");
   };
 
   return (
@@ -178,7 +218,10 @@ export default function EventosPage() {
           <div className="flex-1">
             {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <Select defaultValue="recentes">
+              <Select
+                value={sortBy}
+                onValueChange={(v) => setSortBy(v as SortEventos)}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
@@ -186,6 +229,7 @@ export default function EventosPage() {
                   <SelectItem value="recentes">Mais recentes primeiro</SelectItem>
                   <SelectItem value="antigos">Mais antigos primeiro</SelectItem>
                   <SelectItem value="nome">Nome A-Z</SelectItem>
+                  <SelectItem value="nome-desc">Nome Z-A</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -273,7 +317,7 @@ export default function EventosPage() {
                                     <strong>Classificação:</strong>{" "}
                                     {
                                       CLASSIFICACAO_LABELS[
-                                        evento.classificacao as ClassificacaoEtaria
+                                      evento.classificacao as ClassificacaoEtaria
                                       ]
                                     }
                                   </span>
@@ -341,9 +385,8 @@ export default function EventosPage() {
 
           {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${
-              showFilters ? "block" : "hidden lg:block"
-            }`}
+            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
+              }`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">

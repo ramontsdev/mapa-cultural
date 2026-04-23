@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
 import { mockLugares } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
@@ -34,7 +36,6 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useAuth } from "@/components/auth-provider";
 
 export default function LugaresPage() {
   const { isAuthenticated } = useAuth();
@@ -45,6 +46,7 @@ export default function LugaresPage() {
   const [tipoLugar, setTipoLugar] = useState<string>("todos");
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
 
   const filteredLugares = useMemo(() => {
     return mockLugares.filter((lugar) => {
@@ -76,12 +78,18 @@ export default function LugaresPage() {
     areaAtuacao,
   ]);
 
+  const sortedLugares = useMemo(
+    () => sortListByMode(filteredLugares, sortBy),
+    [filteredLugares, sortBy]
+  );
+
   const clearFilters = () => {
     setSearchQuery("");
     setApenasOficiais(false);
     setPossuiAcessibilidade(false);
     setTipoLugar("todos");
     setAreaAtuacao("todos");
+    setSortBy("recentes");
   };
 
   return (
@@ -179,7 +187,10 @@ export default function LugaresPage() {
           <div className="flex-1">
             {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <Select defaultValue="recentes">
+              <Select
+                value={sortBy}
+                onValueChange={(v) => setSortBy(v as ListSortBy)}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
@@ -187,6 +198,7 @@ export default function LugaresPage() {
                   <SelectItem value="recentes">Mais recentes primeiro</SelectItem>
                   <SelectItem value="antigos">Mais antigos primeiro</SelectItem>
                   <SelectItem value="nome">Nome A-Z</SelectItem>
+                  <SelectItem value="nome-desc">Nome Z-A</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -198,7 +210,7 @@ export default function LugaresPage() {
             {/* Places List */}
             {viewMode === "lista" ? (
               <div className="space-y-4">
-                {filteredLugares.map((lugar) => (
+                {sortedLugares.map((lugar) => (
                   <Card
                     key={lugar.id}
                     className="overflow-hidden transition-shadow hover:shadow-md"

@@ -36,6 +36,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useAuth } from "@/components/auth-provider";
+import { compareListSort, type ListSortBy } from "@/lib/list-sort";
 import {
   mockOportunidades,
   getStatusOportunidade,
@@ -50,10 +51,12 @@ import {
 /** Valor sentinela para o Select (Radix não permite `value=""` em SelectItem). */
 const FILTER_TODOS = "__todos__";
 
+type SortOportunidades = ListSortBy | "encerramento";
+
 export default function OportunidadesPage() {
   const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("recentes");
+  const [sortBy, setSortBy] = useState<SortOportunidades>("recentes");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
@@ -96,18 +99,14 @@ export default function OportunidadesPage() {
       result = result.filter((o) => o.isOficial);
     }
 
-    // Sort
-    if (sortBy === "recentes") {
-      result.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    } else if (sortBy === "encerramento") {
+    if (sortBy === "encerramento") {
       result.sort(
         (a, b) =>
           new Date(a.dataInscricaoFim).getTime() -
           new Date(b.dataInscricaoFim).getTime()
       );
+    } else {
+      result.sort((a, b) => compareListSort(a, b, sortBy));
     }
 
     return result;
@@ -125,6 +124,7 @@ export default function OportunidadesPage() {
     setTipoFilter(FILTER_TODOS);
     setAreaFilter(FILTER_TODOS);
     setShowOnlyOficiais(false);
+    setSortBy("recentes");
   };
 
   const getStatusBadge = (status: string) => {
@@ -305,15 +305,21 @@ export default function OportunidadesPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Select value={sortBy} onValueChange={setSortBy}>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => setSortBy(v as SortOportunidades)}
+            >
               <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="recentes">Mais recentes primeiro</SelectItem>
+                <SelectItem value="antigos">Mais antigos primeiro</SelectItem>
                 <SelectItem value="encerramento">
                   Encerramento próximo
                 </SelectItem>
+                <SelectItem value="nome">Nome A-Z</SelectItem>
+                <SelectItem value="nome-desc">Nome Z-A</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">

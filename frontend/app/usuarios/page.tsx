@@ -1,20 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  Users,
-  Search,
-  List,
-  Map,
-  Grid3X3,
-  ChevronRight,
-  Filter,
-  X,
-  CheckCircle2,
-  Plus,
-} from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,14 +11,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useAuth } from "@/components/auth-provider";
+import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
 import { mockUsers } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
   USER_ROLE_LABELS,
   type AreaAtuacao,
 } from "@/lib/types";
+import {
+  ChevronRight,
+  Filter,
+  Grid3X3,
+  List,
+  Map,
+  Plus,
+  Search,
+  Users,
+  X
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
 export default function UsuariosPage() {
   const { isAuthenticated } = useAuth();
@@ -43,6 +42,7 @@ export default function UsuariosPage() {
   const [tipoAtuacao, setTipoAtuacao] = useState<string>("todos");
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
 
   const filteredUsuarios = useMemo(() => {
     return mockUsers.filter((usuario) => {
@@ -60,10 +60,16 @@ export default function UsuariosPage() {
     });
   }, [searchQuery, tipoAtuacao, areaAtuacao]);
 
+  const sortedUsuarios = useMemo(
+    () => sortListByMode(filteredUsuarios, sortBy),
+    [filteredUsuarios, sortBy]
+  );
+
   const clearFilters = () => {
     setSearchQuery("");
     setTipoAtuacao("todos");
     setAreaAtuacao("todos");
+    setSortBy("recentes");
   };
 
   return (
@@ -169,7 +175,10 @@ export default function UsuariosPage() {
           <div className="flex-1">
             {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-              <Select defaultValue="recentes">
+              <Select
+                value={sortBy}
+                onValueChange={(v) => setSortBy(v as ListSortBy)}
+              >
                 <SelectTrigger className="w-48">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
@@ -177,6 +186,7 @@ export default function UsuariosPage() {
                   <SelectItem value="recentes">Mais recentes primeiro</SelectItem>
                   <SelectItem value="antigos">Mais antigos primeiro</SelectItem>
                   <SelectItem value="nome">Nome A-Z</SelectItem>
+                  <SelectItem value="nome-desc">Nome Z-A</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -188,7 +198,7 @@ export default function UsuariosPage() {
             {/* Users List */}
             {viewMode === "lista" ? (
               <div className="space-y-4">
-                {filteredUsuarios.map((usuario) => (
+                {sortedUsuarios.map((usuario) => (
                   <Card
                     key={usuario.id}
                     className="overflow-hidden transition-shadow hover:shadow-md"
@@ -326,9 +336,8 @@ export default function UsuariosPage() {
 
           {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${
-              showFilters ? "block" : "hidden lg:block"
-            }`}
+            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
+              }`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">

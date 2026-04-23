@@ -1,23 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import Image from "next/image";
-import {
-  ChevronRight,
-  Search,
-  FolderKanban,
-  Calendar,
-  Filter,
-  ArrowRight,
-  BadgeCheck,
-  User,
-  Plus,
-} from "lucide-react";
+import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -32,14 +19,28 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useAuth } from "@/components/auth-provider";
+import { compareListSort, type ListSortBy } from "@/lib/list-sort";
 import { mockProjetos } from "@/lib/mock-data";
 import {
-  TIPO_PROJETO_LABELS,
   AREA_ATUACAO_LABELS,
-  type TipoProjeto,
+  TIPO_PROJETO_LABELS,
   type AreaAtuacao,
+  type TipoProjeto,
 } from "@/lib/types";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Calendar,
+  ChevronRight,
+  Filter,
+  FolderKanban,
+  Plus,
+  Search,
+  User,
+} from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 
 /** Valor sentinela para o Select (Radix não permite `value=""` em SelectItem). */
 const FILTER_TODOS = "__todos__";
@@ -47,7 +48,7 @@ const FILTER_TODOS = "__todos__";
 export default function ProjetosPage() {
   const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState("recentes");
+  const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
   const [showOnlyOficiais, setShowOnlyOficiais] = useState(false);
@@ -83,15 +84,7 @@ export default function ProjetosPage() {
       result = result.filter((p) => p.isOficial);
     }
 
-    // Sort
-    if (sortBy === "recentes") {
-      result.sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-    } else if (sortBy === "alfabetica") {
-      result.sort((a, b) => a.nome.localeCompare(b.nome));
-    }
+    result.sort((a, b) => compareListSort(a, b, sortBy));
 
     return result;
   }, [searchQuery, sortBy, tipoFilter, areaFilter, showOnlyOficiais]);
@@ -100,6 +93,7 @@ export default function ProjetosPage() {
     setTipoFilter(FILTER_TODOS);
     setAreaFilter(FILTER_TODOS);
     setShowOnlyOficiais(false);
+    setSortBy("recentes");
   };
 
   const formatDate = (dateString: string) => {
@@ -224,13 +218,18 @@ export default function ProjetosPage() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Select value={sortBy} onValueChange={setSortBy}>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => setSortBy(v as ListSortBy)}
+            >
               <SelectTrigger className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="recentes">Mais recentes primeiro</SelectItem>
-                <SelectItem value="alfabetica">Ordem alfabética</SelectItem>
+                <SelectItem value="antigos">Mais antigos primeiro</SelectItem>
+                <SelectItem value="nome">Nome A-Z</SelectItem>
+                <SelectItem value="nome-desc">Nome Z-A</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">
