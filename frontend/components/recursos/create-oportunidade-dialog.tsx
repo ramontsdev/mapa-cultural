@@ -1,5 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Plus, X } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,10 +31,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildNewMeuOportunidadeRecord,
-  upsertMeuOportunidade,
-} from "@/lib/meus-oportunidades-storage";
+import { useMyEvents } from "@/hooks/api/use-events";
+import { useCreateOpportunity } from "@/hooks/api/use-opportunities";
+import { useMyProjects } from "@/hooks/api/use-projects";
+import { ApiError } from "@/lib/api/http";
+import { formatMetadata } from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_OPORTUNIDADE_LABELS,
@@ -40,24 +46,28 @@ import {
   criarOportunidadeRapidoSchema,
   type CriarOportunidadeRapidoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, X } from "lucide-react";
-import { useForm } from "react-hook-form";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriadoRascunho: (id: string) => void;
-  onCriadoPublicado: (id: string) => void;
+  onCriado: (id: string) => void;
+};
+
+type ExtendedFormData = CriarOportunidadeRapidoFormData & {
+  objectType: "Event" | "Project";
+  objectId: string;
 };
 
 export function CreateOportunidadeDialog({
   open,
   onOpenChange,
-  onCriadoRascunho,
-  onCriadoPublicado,
+  onCriado,
 }: Props) {
-  const form = useForm<CriarOportunidadeRapidoFormData>({
+  const createMutation = useCreateOpportunity();
+  const myEventsQuery = useMyEvents({ pageSize: 50 });
+  const myProjectsQuery = useMyProjects({ pageSize: 50 });
+
+  const form = useForm<ExtendedFormData>({
     resolver: zodResolver(criarOportunidadeRapidoSchema),
     defaultValues: {
       nome: "",
@@ -66,11 +76,15 @@ export function CreateOportunidadeDialog({
       dataInscricaoInicio: "",
       dataInscricaoFim: "",
       areasInteresse: [],
+      objectType: "Event",
+      objectId: "",
     },
   });
 
   const areas = form.watch("areasInteresse");
   const descricao = form.watch("descricao");
+  const objectType = form.watch("objectType");
+  const objectId = form.watch("objectId");
 
   const addArea = (a: AreaAtuacao) => {
     const cur = form.getValues("areasInteresse");
@@ -83,7 +97,7 @@ export function CreateOportunidadeDialog({
     form.setValue(
       "areasInteresse",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -91,37 +105,72 @@ export function CreateOportunidadeDialog({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const submit = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      const record = buildNewMeuOportunidadeRecord(
-        {
-          nome: data.nome,
-          tipo: data.tipo as TipoOportunidade,
-          descricao: data.descricao,
-          dataInscricaoInicio: data.dataInscricaoInicio,
-          dataInscricaoFim: data.dataInscricaoFim,
-          areasInteresse: data.areasInteresse,
-        },
-        status
-      );
-      upsertMeuOportunidade(record);
-      form.reset({
-        nome: "",
-        tipo: "edital",
-        descricao: "",
-        dataInscricaoInicio: "",
-        dataInscricaoFim: "",
-        areasInteresse: [],
+  const options =
+    objectType === "Event"
+      ? (myEventsQuery.data?.items ?? []).map((e) => ({ id: e.id, name: e.name }))
+      : (myProjectsQuery.data?.items ?? []).map((p) => ({
+          id: p.id,
+          name: p.name,
+        }));
+
+  const submit = () => {
+    if (!objectId) {
+      form.setError("objectId", {
+        type: "manual",
+        message: "Selecione um evento ou projeto.",
       });
-      onOpenChange(false);
-      if (status === "draft") onCriadoRascunho(record.id);
-      else onCriadoPublicado(record.id);
+      return;
+    }
+
+    void form.handleSubmit(async (data) => {
+      try {
+        const shortDescription = formatMetadata(data.descricao, {
+          tipo: data.tipo,
+          areas: data.areasInteresse.join(","),
+        });
+
+        const registrationFrom = new Date(
+          `${data.dataInscricaoInicio}T00:00:00Z`,
+        ).toISOString();
+        const registrationTo = new Date(
+          `${data.dataInscricaoFim}T23:59:59Z`,
+        ).toISOString();
+
+        const opportunity = await createMutation.mutateAsync({
+          name: data.nome,
+          shortDescription,
+          registrationFrom,
+          registrationTo,
+          objectType: data.objectType,
+          objectId: data.objectId,
+        });
+
+        toast.success("Oportunidade criada.");
+        form.reset({
+          nome: "",
+          tipo: "edital",
+          descricao: "",
+          dataInscricaoInicio: "",
+          dataInscricaoFim: "",
+          areasInteresse: [],
+          objectType: "Event",
+          objectId: "",
+        });
+        onOpenChange(false);
+        onCriado(opportunity.id);
+      } catch (error) {
+        toast.error(
+          error instanceof ApiError
+            ? error.message
+            : "Não foi possível criar a oportunidade.",
+        );
+      }
     })();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[100dvh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
+      <DialogContent className="flex max-h-dvh w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
         <div className="overflow-y-auto p-6 pb-4">
           <DialogHeader>
             <DialogTitle>Criar oportunidade</DialogTitle>
@@ -153,7 +202,9 @@ export function CreateOportunidadeDialog({
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
                     <Select
-                      onValueChange={field.onChange}
+                      onValueChange={(v) =>
+                        field.onChange(v as TipoOportunidade)
+                      }
                       value={field.value}
                     >
                       <FormControl>
@@ -167,7 +218,7 @@ export function CreateOportunidadeDialog({
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
@@ -175,6 +226,72 @@ export function CreateOportunidadeDialog({
                   </FormItem>
                 )}
               />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="objectType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vinculado a</FormLabel>
+                      <Select
+                        onValueChange={(v) => {
+                          field.onChange(v);
+                          form.setValue("objectId", "", {
+                            shouldValidate: false,
+                          });
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Event">Evento</SelectItem>
+                          <SelectItem value="Project">Projeto</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="objectId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        {objectType === "Event" ? "Evento" : "Projeto"}
+                      </FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {options.length === 0 && (
+                            <SelectItem value="__empty__" disabled>
+                              Nenhum disponível
+                            </SelectItem>
+                          )}
+                          {options.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
@@ -284,21 +401,24 @@ export function CreateOportunidadeDialog({
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
+            disabled={createMutation.isPending}
           >
             Cancelar
           </Button>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => submit("draft")}
-            >
-              Criar em rascunho
-            </Button>
-            <Button type="button" onClick={() => submit("published")}>
-              Criar e publicar
-            </Button>
-          </div>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Criando…
+              </>
+            ) : (
+              "Criar oportunidade"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

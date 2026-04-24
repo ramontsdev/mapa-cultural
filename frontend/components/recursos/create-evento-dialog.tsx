@@ -1,5 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Plus, X } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,10 +31,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildNewMeuEventoRecord,
-  upsertMeuEvento,
-} from "@/lib/meus-eventos-storage";
+import { useCreateEvent } from "@/hooks/api/use-events";
+import { useMySpaces } from "@/hooks/api/use-spaces";
+import { createEventOccurrence } from "@/lib/api/events";
+import { ApiError } from "@/lib/api/http";
+import { formatMetadata } from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   CLASSIFICACAO_LABELS,
@@ -39,25 +45,35 @@ import {
   criarEventoRapidoSchema,
   type CriarEventoRapidoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, X } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { z } from "zod";
+
+const criarEventoRapidoDialogSchema = criarEventoRapidoSchema.extend({
+  imagem: z
+    .string()
+    .optional()
+    .refine(
+      (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
+      "URL da imagem inválida",
+    ),
+});
+
+type CriarEventoRapidoDialogFormData = CriarEventoRapidoFormData & {
+  spaceId?: string;
+  imagem?: string;
+};
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriadoRascunho: (id: string) => void;
-  onCriadoPublicado: (id: string) => void;
+  onCriado: (id: string) => void;
 };
 
-export function CreateEventoDialog({
-  open,
-  onOpenChange,
-  onCriadoRascunho,
-  onCriadoPublicado,
-}: Props) {
-  const form = useForm<CriarEventoRapidoFormData>({
-    resolver: zodResolver(criarEventoRapidoSchema),
+export function CreateEventoDialog({ open, onOpenChange, onCriado }: Props) {
+  const createMutation = useCreateEvent();
+  const mySpacesQuery = useMySpaces({ pageSize: 50 });
+
+  const form = useForm<CriarEventoRapidoDialogFormData>({
+    resolver: zodResolver(criarEventoRapidoDialogSchema),
     defaultValues: {
       nome: "",
       descricao: "",
@@ -67,12 +83,18 @@ export function CreateEventoDialog({
       entrada: "gratuito",
       preco: "",
       areasAtuacao: [],
+      spaceId: "",
+      imagem: "",
     },
   });
+
+  const spaceId = form.watch("spaceId");
 
   const areas = form.watch("areasAtuacao");
   const entrada = form.watch("entrada");
   const descricao = form.watch("descricao");
+  const dataInicio = form.watch("dataInicio");
+  const horario = form.watch("horario");
 
   const addArea = (a: AreaAtuacao) => {
     const cur = form.getValues("areasAtuacao");
@@ -85,7 +107,7 @@ export function CreateEventoDialog({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -93,45 +115,84 @@ export function CreateEventoDialog({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const submit = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      const preco =
-        data.entrada === "pago" && data.preco?.trim()
-          ? parseFloat(data.preco.replace(",", "."))
-          : undefined;
-      const record = buildNewMeuEventoRecord(
-        {
-          nome: data.nome,
-          descricao: data.descricao,
+  const submit = () => {
+    void form.handleSubmit(async (data) => {
+      try {
+        const shortDescription = formatMetadata(data.descricao, {
           dataInicio: data.dataInicio,
           horario: data.horario,
           classificacao: data.classificacao,
           entrada: data.entrada,
-          preco,
-          areasAtuacao: data.areasAtuacao,
-        },
-        status
-      );
-      upsertMeuEvento(record);
-      form.reset({
-        nome: "",
-        descricao: "",
-        dataInicio: "",
-        horario: "",
-        classificacao: "livre",
-        entrada: "gratuito",
-        preco: "",
-        areasAtuacao: [],
-      });
-      onOpenChange(false);
-      if (status === "draft") onCriadoRascunho(record.id);
-      else onCriadoPublicado(record.id);
+          preco: data.entrada === "pago" ? data.preco : undefined,
+          areas: data.areasAtuacao.join(","),
+          imagem: data.imagem?.trim() || undefined,
+        });
+
+        const event = await createMutation.mutateAsync({
+          name: data.nome,
+          shortDescription,
+        });
+
+        if (data.spaceId) {
+          try {
+            const untilIso = data.dataInicio
+              ? new Date(`${data.dataInicio}T23:59:59Z`).toISOString()
+              : new Date().toISOString();
+            await createEventOccurrence(event.id, {
+              spaceId: data.spaceId,
+              rule: JSON.stringify({
+                frequency: "once",
+                startsOn: data.dataInicio,
+                startsAt: data.horario,
+              }),
+              startsOn: data.dataInicio || undefined,
+              startsAt: data.horario || undefined,
+              frequency: "once",
+              separation: 1,
+              until: untilIso,
+              timezoneName: "America/Sao_Paulo",
+            });
+          } catch (error) {
+            toast.warning(
+              `Evento criado, mas não foi possível registrar a ocorrência: ${
+                error instanceof ApiError ? error.message : "erro"
+              }`,
+            );
+          }
+        }
+
+        toast.success("Evento criado.");
+        form.reset({
+          nome: "",
+          descricao: "",
+          dataInicio: "",
+          horario: "",
+          classificacao: "livre",
+          entrada: "gratuito",
+          preco: "",
+          areasAtuacao: [],
+          spaceId: "",
+          imagem: "",
+        });
+        onOpenChange(false);
+        onCriado(event.id);
+      } catch (error) {
+        toast.error(
+          error instanceof ApiError
+            ? error.message
+            : "Não foi possível criar o evento.",
+        );
+      }
     })();
   };
 
+  const mySpaces = mySpacesQuery.data?.items ?? [];
+  const canSubmitOccurrence = !spaceId || (dataInicio && horario);
+  const isSubmitting = createMutation.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[100dvh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
+      <DialogContent className="flex max-h-dvh w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
         <div className="overflow-y-auto p-6 pb-4">
           <DialogHeader>
             <DialogTitle>Criar evento</DialogTitle>
@@ -156,29 +217,66 @@ export function CreateEventoDialog({
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="dataInicio"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="dataInicio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="horario"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Horário</FormLabel>
+                      <FormControl>
+                        <Input type="time" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
-                name="horario"
+                name="spaceId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Horário</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
+                    <FormLabel>Espaço (opcional)</FormLabel>
+                    <Select
+                      onValueChange={(v) =>
+                        field.onChange(v === "__none__" ? "" : v)
+                      }
+                      value={field.value ? field.value : "__none__"}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um espaço" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sem espaço</SelectItem>
+                        {mySpaces.map((space) => (
+                          <SelectItem key={space.id} value={space.id}>
+                            {space.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Ao selecionar um espaço, será criada uma ocorrência
+                      vinculando data/horário ao espaço.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -206,7 +304,7 @@ export function CreateEventoDialog({
                               <SelectItem key={value} value={value}>
                                 {label}
                               </SelectItem>
-                            )
+                            ),
                           )}
                         </SelectContent>
                       </Select>
@@ -326,6 +424,24 @@ export function CreateEventoDialog({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="imagem"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>URL da imagem (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://…"
+                        {...field}
+                        value={field.value ?? ""}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </form>
           </Form>
         </div>
@@ -336,26 +452,25 @@ export function CreateEventoDialog({
             variant="ghost"
             className="order-last sm:order-first"
             onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
           >
             Cancelar
           </Button>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => submit("draft")}
-            >
-              Criar em rascunho
-            </Button>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => submit("published")}
-            >
-              Criar e publicar
-            </Button>
-          </div>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={isSubmitting || !canSubmitOccurrence}
+            className="w-full sm:w-auto"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Criando…
+              </>
+            ) : (
+              "Criar evento"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

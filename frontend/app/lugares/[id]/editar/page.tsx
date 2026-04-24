@@ -1,7 +1,24 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { notFound, useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
 import { MiniMapWrapper } from "@/app/lugares/[id]/mini-map-wrapper";
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { StaticMapPlaceholder } from "@/components/mini-map";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,124 +54,98 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { StaticMapPlaceholder } from "@/components/mini-map";
+import { useMyAgent } from "@/hooks/api/use-agents";
 import {
-  getMeuEspacoById,
-  removeMeuEspaco,
-  subscribeMeusEspacosChanged,
-  upsertMeuEspaco,
-} from "@/lib/meus-espacos-storage";
+  useDeleteSpace,
+  useSpace,
+  useUpdateSpace,
+} from "@/hooks/api/use-spaces";
+import { ApiError } from "@/lib/api/http";
+import type { SpaceDTO } from "@/lib/api/types";
+import { formatMetadata, mapSpaceToLugar } from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_LUGAR_LABELS,
   type AreaAtuacao,
-  type Lugar,
-  type MeuEspacoRecord,
 } from "@/lib/types";
 import {
   espacoEdicaoFormSchema,
-  validateEspacoForPublish,
   type EspacoEdicaoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, ChevronRight, Plus, Trash2, X } from "lucide-react";
-import Link from "next/link";
-import { notFound, useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
 
-function recordToFormValues(rec: MeuEspacoRecord): EspacoEdicaoFormData {
-  const l = rec.lugar;
+function spaceToFormValues(space: SpaceDTO): EspacoEdicaoFormData {
+  const lugar = mapSpaceToLugar(space);
   return {
-    nome: l.nome,
-    tipo: l.tipo,
-    descricao: l.descricao,
-    areasAtuacao: [...l.areasAtuacao],
-    website: l.website ?? "",
-    logradouro: l.endereco.logradouro,
-    numero: l.endereco.numero,
-    bairro: l.endereco.bairro,
-    cidade: l.endereco.cidade,
-    estado: l.endereco.estado,
-    cep: l.endereco.cep,
-    acessibilidade: l.acessibilidade,
-    telefone: l.telefone ?? "",
-    email: l.email ?? "",
-    horarioFuncionamento: l.horarioFuncionamento ?? "",
-    lat: l.coordenadas != null ? String(l.coordenadas.lat) : "",
-    lng: l.coordenadas != null ? String(l.coordenadas.lng) : "",
-    instagram: l.redesSociais?.instagram ?? "",
-    facebook: l.redesSociais?.facebook ?? "",
-    twitter: l.redesSociais?.twitter ?? "",
-    youtube: l.redesSociais?.youtube ?? "",
+    nome: lugar.nome,
+    tipo: lugar.tipo,
+    descricao: lugar.descricao,
+    areasAtuacao: [...lugar.areasAtuacao],
+    website: lugar.website ?? "",
+    logradouro: lugar.endereco.logradouro,
+    numero: lugar.endereco.numero,
+    bairro: lugar.endereco.bairro,
+    cidade: lugar.endereco.cidade,
+    estado: lugar.endereco.estado,
+    cep: lugar.endereco.cep,
+    acessibilidade: lugar.acessibilidade,
+    telefone: lugar.telefone ?? "",
+    email: lugar.email ?? "",
+    horarioFuncionamento: lugar.horarioFuncionamento ?? "",
+    lat: lugar.coordenadas ? String(lugar.coordenadas.lat) : "",
+    lng: lugar.coordenadas ? String(lugar.coordenadas.lng) : "",
+    instagram: lugar.redesSociais?.instagram ?? "",
+    facebook: lugar.redesSociais?.facebook ?? "",
+    twitter: lugar.redesSociais?.twitter ?? "",
+    youtube: lugar.redesSociais?.youtube ?? "",
   };
 }
 
-function formToLugar(
-  data: EspacoEdicaoFormData,
-  rec: MeuEspacoRecord
-): Lugar {
+function formToPayload(data: EspacoEdicaoFormData) {
   const latStr = (data.lat ?? "").trim().replace(",", ".");
   const lngStr = (data.lng ?? "").trim().replace(",", ".");
   const latNum = parseFloat(latStr);
   const lngNum = parseFloat(lngStr);
-  const redes =
-    data.instagram ||
-    data.facebook ||
-    data.twitter ||
-    data.youtube
-      ? {
-          instagram: data.instagram || undefined,
-          facebook: data.facebook || undefined,
-          twitter: data.twitter || undefined,
-          youtube: data.youtube || undefined,
-        }
-      : undefined;
+  const coordsValid =
+    !Number.isNaN(latNum) && !Number.isNaN(lngNum) && latStr !== "" && lngStr !== "";
+
+  const shortDescription = formatMetadata(data.descricao, {
+    tipo: data.tipo,
+    areas: data.areasAtuacao.join(","),
+    logradouro: data.logradouro,
+    numero: data.numero,
+    bairro: data.bairro,
+    cidade: data.cidade,
+    estado: data.estado.toUpperCase().slice(0, 2),
+    cep: data.cep,
+    acessibilidade: data.acessibilidade ? "true" : "false",
+    telefone: data.telefone?.trim(),
+    email: data.email?.trim(),
+    website: data.website?.trim(),
+    horario: data.horarioFuncionamento?.trim(),
+    lat: coordsValid ? String(latNum) : undefined,
+    lng: coordsValid ? String(lngNum) : undefined,
+    instagram: data.instagram,
+    facebook: data.facebook,
+    twitter: data.twitter,
+    youtube: data.youtube,
+  });
 
   return {
-    ...rec.lugar,
-    nome: data.nome,
-    tipo: data.tipo,
-    descricao: data.descricao,
-    areasAtuacao: data.areasAtuacao,
-    website: (data.website ?? "").trim() || undefined,
-    endereco: {
-      logradouro: data.logradouro,
-      numero: data.numero,
-      bairro: data.bairro,
-      cidade: data.cidade,
-      estado: data.estado.toUpperCase().slice(0, 2),
-      cep: data.cep,
-    },
-    acessibilidade: data.acessibilidade,
-    telefone: data.telefone?.trim() || undefined,
-    email: data.email?.trim() || undefined,
-    horarioFuncionamento: data.horarioFuncionamento?.trim() || undefined,
-    coordenadas:
-      !Number.isNaN(latNum) &&
-      !Number.isNaN(lngNum) &&
-      latStr !== "" &&
-      lngStr !== ""
-        ? { lat: latNum, lng: lngNum }
-        : undefined,
-    redesSociais: redes,
+    name: data.nome,
+    shortDescription,
   };
 }
 
-function EditarEspacoForm({
-  record,
-  id,
-}: {
-  record: MeuEspacoRecord;
-  id: string;
-}) {
+function EditarEspacoForm({ space }: { space: SpaceDTO }) {
   const router = useRouter();
-  const [publishError, setPublishError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const updateMutation = useUpdateSpace(space.id);
+  const deleteMutation = useDeleteSpace();
 
   const form = useForm<EspacoEdicaoFormData>({
     resolver: zodResolver(espacoEdicaoFormSchema),
-    defaultValues: recordToFormValues(record),
+    defaultValues: spaceToFormValues(space),
   });
 
   const areas = form.watch("areasAtuacao");
@@ -173,7 +164,7 @@ function EditarEspacoForm({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -181,23 +172,31 @@ function EditarEspacoForm({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const persist = (status: MeuEspacoRecord["status"]) => {
-    void form.handleSubmit((data) => {
-      if (status === "published") {
-        const err = validateEspacoForPublish(data);
-        if (err) {
-          setPublishError(err);
-          return;
-        }
-      }
-      setPublishError(null);
-      const lugar = formToLugar(data, record);
-      upsertMeuEspaco({
-        ...record,
-        status,
-        lugar,
-      });
-    })();
+  const persist = form.handleSubmit(async (data) => {
+    try {
+      await updateMutation.mutateAsync(formToPayload(data));
+      toast.success("Espaço atualizado.");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível salvar o espaço.",
+      );
+    }
+  });
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(space.id);
+      toast.success("Espaço excluído.");
+      router.push("/lugares/meus");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível excluir.",
+      );
+    }
   };
 
   const latNum = parseFloat(String(latVal).replace(",", "."));
@@ -221,8 +220,8 @@ function EditarEspacoForm({
               Espaços
             </Link>
             <ChevronRight className="h-4 w-4" />
-            <Link href={`/lugares/${id}`} className="hover:text-foreground">
-              {record.lugar.nome}
+            <Link href={`/lugares/${space.id}`} className="hover:text-foreground">
+              {space.name}
             </Link>
             <ChevronRight className="h-4 w-4" />
             <span className="font-medium text-foreground">Editar</span>
@@ -242,27 +241,8 @@ function EditarEspacoForm({
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {record.status === "draft" && (
-          <div
-            className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
-            role="status"
-          >
-            Este espaço está em rascunho. Publique para exibi-lo no catálogo
-            público.
-          </div>
-        )}
-
-        {publishError && (
-          <div
-            className="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            role="alert"
-          >
-            {publishError}
-          </div>
-        )}
-
         <Form {...form}>
-          <form className="grid gap-8 lg:grid-cols-3">
+          <form className="grid gap-8 lg:grid-cols-3" onSubmit={persist}>
             <div className="space-y-8 lg:col-span-2">
               <Card>
                 <CardHeader>
@@ -303,7 +283,7 @@ function EditarEspacoForm({
                                 <SelectItem key={value} value={value}>
                                   {label}
                                 </SelectItem>
-                              )
+                              ),
                             )}
                           </SelectContent>
                         </Select>
@@ -679,17 +659,9 @@ function EditarEspacoForm({
             <Button
               type="button"
               variant="secondary"
-              className="gap-2 bg-orange-500/90 text-white hover:bg-orange-500"
-              disabled
-              title="Em breve"
-            >
-              Arquivar
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
               className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => setDeleteOpen(true)}
+              disabled={deleteMutation.isPending}
             >
               <Trash2 className="h-4 w-4" />
               Excluir
@@ -700,24 +672,20 @@ function EditarEspacoForm({
               type="button"
               variant="outline"
               className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
-              onClick={() => router.push(`/lugares/${id}`)}
+              onClick={() => router.push(`/lugares/${space.id}`)}
             >
               Sair
             </Button>
             <Button
               type="button"
-              variant="outline"
-              className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
-              onClick={() => persist(record.status)}
-            >
-              Salvar
-            </Button>
-            <Button
-              type="button"
               className="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
-              onClick={() => persist("published")}
+              onClick={persist}
+              disabled={updateMutation.isPending}
             >
-              Salvar e publicar
+              {updateMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Salvar
             </Button>
           </div>
         </div>
@@ -728,18 +696,14 @@ function EditarEspacoForm({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir espaço?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O espaço será removido deste
-              dispositivo.
+              Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                removeMeuEspaco(id);
-                router.push("/lugares/meus");
-              }}
+              onClick={handleDelete}
             >
               Excluir
             </AlertDialogAction>
@@ -754,19 +718,19 @@ export default function EditarEspacoPage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
-  const [tick, setTick] = useState(0);
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
-  useEffect(() => subscribeMeusEspacosChanged(() => setTick((t) => t + 1)), []);
+  const spaceQuery = useSpace(id);
+  const meQuery = useMyAgent();
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace("/cadastro");
-  }, [isAuthenticated, router]);
+    if (!isAuthLoading && !isAuthenticated) router.replace("/cadastro");
+  }, [isAuthenticated, isAuthLoading, router]);
 
-  const record = useMemo(() => {
-    void tick;
-    return getMeuEspacoById(id);
-  }, [id, tick]);
+  const canEdit = useMemo(() => {
+    if (!spaceQuery.data || !meQuery.data) return false;
+    return spaceQuery.data.agentId === meQuery.data.id;
+  }, [spaceQuery.data, meQuery.data]);
 
   if (!isAuthenticated) {
     return (
@@ -776,15 +740,48 @@ export default function EditarEspacoPage() {
     );
   }
 
-  if (!record) {
+  if (spaceQuery.isLoading || meQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState isLoading={true}>{null}</QueryState>
+      </div>
+    );
+  }
+
+  if (spaceQuery.error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState
+          isLoading={false}
+          error={spaceQuery.error}
+          onRetry={() => spaceQuery.refetch()}
+        >
+          {null}
+        </QueryState>
+      </div>
+    );
+  }
+
+  if (!spaceQuery.data) {
     notFound();
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center">
+          <p className="text-sm text-destructive">
+            Você não tem permissão para editar este espaço.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <EditarEspacoForm
-      key={`${record.id}-${record.updatedAt}`}
-      record={record}
-      id={id}
+      key={`${spaceQuery.data.id}-${spaceQuery.data.updateTimestamp ?? spaceQuery.data.createTimestamp}`}
+      space={spaceQuery.data}
     />
   );
 }

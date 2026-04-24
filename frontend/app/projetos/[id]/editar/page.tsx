@@ -1,5 +1,14 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronRight, Loader2, Plus, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { notFound, useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
+import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
 import {
   AlertDialog,
@@ -30,78 +39,70 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMyAgent } from "@/hooks/api/use-agents";
 import {
-  getMeuProjetoById,
-  removeMeuProjeto,
-  subscribeMeusProjetosChanged,
-  upsertMeuProjeto,
-} from "@/lib/meus-projetos-storage";
+  useDeleteProject,
+  useProject,
+  useUpdateProject,
+} from "@/hooks/api/use-projects";
+import { ApiError } from "@/lib/api/http";
+import type { ProjectDTO } from "@/lib/api/types";
+import { formatMetadata, mapProjectToProjeto } from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_PROJETO_LABELS,
   type AreaAtuacao,
-  type MeuProjetoRecord,
-  type Projeto,
-  type TipoProjeto,
 } from "@/lib/types";
 import {
   meuProjetoEdicaoSchema,
   type MeuProjetoEdicaoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronRight, Plus, Trash2, X } from "lucide-react";
-import Link from "next/link";
-import { notFound, useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
 
-function recordToFormValues(rec: MeuProjetoRecord): MeuProjetoEdicaoFormData {
-  const p = rec.projeto;
+function projectToFormValues(project: ProjectDTO): MeuProjetoEdicaoFormData {
+  const projeto = mapProjectToProjeto(project);
   return {
-    nome: p.nome,
-    tipo: p.tipo,
-    descricao: p.descricao,
-    responsavel: p.responsavel,
-    areasAtuacao: [...p.areasAtuacao],
-    dataInicio: p.dataInicio ?? "",
-    dataFim: p.dataFim ?? "",
-    parceiros: p.parceiros?.length ? p.parceiros.join(", ") : "",
-    imagem: p.imagem ?? "",
+    nome: projeto.nome,
+    tipo: projeto.tipo,
+    descricao: projeto.descricao,
+    responsavel: projeto.responsavel,
+    areasAtuacao: [...projeto.areasAtuacao],
+    dataInicio: projeto.dataInicio ?? "",
+    dataFim: projeto.dataFim ?? "",
+    parceiros: projeto.parceiros?.length ? projeto.parceiros.join(", ") : "",
+    imagem: "",
   };
 }
 
-function formToProjeto(data: MeuProjetoEdicaoFormData, base: Projeto): Projeto {
+function formToPayload(data: MeuProjetoEdicaoFormData) {
   const parceirosStr = data.parceiros?.trim();
   const parceiros = parceirosStr
-    ? parceirosStr.split(/[,;]+/).map((s) => s.trim()).filter(Boolean)
-    : undefined;
-  return {
-    ...base,
-    nome: data.nome,
-    tipo: data.tipo as TipoProjeto,
-    descricao: data.descricao,
+    ? parceirosStr
+        .split(/[,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  const shortDescription = formatMetadata(data.descricao, {
+    tipo: data.tipo,
     responsavel: data.responsavel,
-    areasAtuacao: data.areasAtuacao,
-    dataInicio: data.dataInicio?.trim() || undefined,
-    dataFim: data.dataFim?.trim() || undefined,
-    parceiros,
-    imagem: data.imagem?.trim() || undefined,
+    areas: data.areasAtuacao.join(","),
+    parceiros: parceiros.join(","),
+  });
+  return {
+    name: data.nome,
+    shortDescription,
   };
 }
 
-function EditarMeuProjetoForm({
-  record,
-  id,
-}: {
-  record: MeuProjetoRecord;
-  id: string;
-}) {
+function EditarProjetoForm({ project }: { project: ProjectDTO }) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  const updateMutation = useUpdateProject(project.id);
+  const deleteMutation = useDeleteProject();
+
   const form = useForm<MeuProjetoEdicaoFormData>({
     resolver: zodResolver(meuProjetoEdicaoSchema),
-    defaultValues: recordToFormValues(record),
+    defaultValues: projectToFormValues(project),
   });
 
   const areas = form.watch("areasAtuacao");
@@ -117,7 +118,7 @@ function EditarMeuProjetoForm({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -125,15 +126,31 @@ function EditarMeuProjetoForm({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const salvar = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      upsertMeuProjeto({
-        ...record,
-        status,
-        projeto: formToProjeto(data, record.projeto),
-      });
-      if (status === "published") router.push(`/projetos/${id}`);
-    })();
+  const salvar = form.handleSubmit(async (data) => {
+    try {
+      await updateMutation.mutateAsync(formToPayload(data));
+      toast.success("Projeto atualizado.");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível salvar o projeto.",
+      );
+    }
+  });
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(project.id);
+      toast.success("Projeto excluído.");
+      router.push("/projetos/meus");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível excluir.",
+      );
+    }
   };
 
   return (
@@ -145,7 +162,7 @@ function EditarMeuProjetoForm({
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+              <form className="space-y-5" onSubmit={salvar}>
                 <FormField
                   control={form.control}
                   name="nome"
@@ -180,7 +197,7 @@ function EditarMeuProjetoForm({
                               <SelectItem key={value} value={value}>
                                 {label}
                               </SelectItem>
-                            )
+                            ),
                           )}
                         </SelectContent>
                       </Select>
@@ -306,41 +323,29 @@ function EditarMeuProjetoForm({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="imagem"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>URL da imagem (opcional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </form>
             </Form>
 
             <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:flex-wrap">
               <Button
                 type="button"
-                variant="outline"
-                onClick={() => salvar("draft")}
+                onClick={salvar}
+                disabled={updateMutation.isPending}
               >
-                Salvar rascunho
-              </Button>
-              <Button type="button" onClick={() => salvar("published")}>
-                Publicar
+                {updateMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Salvar
               </Button>
               <Button variant="ghost" asChild>
-                <Link href={`/projetos/${id}`}>Cancelar</Link>
+                <Link href={`/projetos/${project.id}`}>Cancelar</Link>
               </Button>
               <Button
                 type="button"
                 variant="destructive"
                 className="sm:ml-auto"
                 onClick={() => setDeleteOpen(true)}
+                disabled={deleteMutation.isPending}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Excluir
@@ -355,18 +360,14 @@ function EditarMeuProjetoForm({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir projeto?</AlertDialogTitle>
             <AlertDialogDescription>
-              Remove o cadastro deste dispositivo. Esta ação não pode ser
-              desfeita.
+              Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                removeMeuProjeto(id);
-                router.push("/projetos/meus");
-              }}
+              onClick={handleDelete}
             >
               Excluir
             </AlertDialogAction>
@@ -378,25 +379,22 @@ function EditarMeuProjetoForm({
 }
 
 export default function EditarMeuProjetoPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
-  const [tick, setTick] = useState(0);
 
-  useEffect(
-    () => subscribeMeusProjetosChanged(() => setTick((t) => t + 1)),
-    []
-  );
+  const projectQuery = useProject(id);
+  const meQuery = useMyAgent();
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace("/cadastro");
-  }, [isAuthenticated, router]);
+    if (!isAuthLoading && !isAuthenticated) router.replace("/cadastro");
+  }, [isAuthenticated, isAuthLoading, router]);
 
-  const record = useMemo(() => {
-    void tick;
-    return getMeuProjetoById(id);
-  }, [id, tick]);
+  const canEdit = useMemo(() => {
+    if (!projectQuery.data || !meQuery.data) return false;
+    return projectQuery.data.agentId === meQuery.data.id;
+  }, [projectQuery.data, meQuery.data]);
 
   if (!isAuthenticated) {
     return (
@@ -406,8 +404,40 @@ export default function EditarMeuProjetoPage() {
     );
   }
 
-  if (!record) {
-    notFound();
+  if (projectQuery.isLoading || meQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+        <QueryState isLoading={true}>{null}</QueryState>
+      </div>
+    );
+  }
+
+  if (projectQuery.error) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+        <QueryState
+          isLoading={false}
+          error={projectQuery.error}
+          onRetry={() => projectQuery.refetch()}
+        >
+          {null}
+        </QueryState>
+      </div>
+    );
+  }
+
+  if (!projectQuery.data) notFound();
+
+  if (!canEdit) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center">
+          <p className="text-sm text-destructive">
+            Você não tem permissão para editar este projeto.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -427,7 +457,10 @@ export default function EditarMeuProjetoPage() {
           </nav>
         </div>
       </div>
-      <EditarMeuProjetoForm record={record} id={id} />
+      <EditarProjetoForm
+        key={`${projectQuery.data.id}-${projectQuery.data.updateTimestamp ?? projectQuery.data.createTimestamp}`}
+        project={projectQuery.data}
+      />
     </div>
   );
 }

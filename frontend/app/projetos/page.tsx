@@ -1,6 +1,23 @@
 "use client";
 
+import {
+  ArrowRight,
+  BadgeCheck,
+  Calendar,
+  ChevronRight,
+  Filter,
+  FolderKanban,
+  Plus,
+  Search,
+  User,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { CreateProjetoDialog } from "@/components/recursos/create-projeto-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,56 +36,27 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useProjects } from "@/hooks/api/use-projects";
+import { mapProjectToProjeto } from "@/lib/api/types";
 import { compareListSort, type ListSortBy } from "@/lib/list-sort";
-import { mockProjetos } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_PROJETO_LABELS,
   type AreaAtuacao,
   type TipoProjeto,
 } from "@/lib/types";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Calendar,
-  ChevronRight,
-  Filter,
-  FolderKanban,
-  Plus,
-  Search,
-  User,
-} from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { CreateProjetoDialog } from "@/components/recursos/create-projeto-dialog";
-import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
-import {
-  listProjetosPublicadosUsuario,
-  subscribeMeusProjetosChanged,
-} from "@/lib/meus-projetos-storage";
 
-/** Valor sentinela para o Select (Radix não permite `value=""` em SelectItem). */
 const FILTER_TODOS = "__todos__";
 
 export default function ProjetosPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const [storageTick, setStorageTick] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
-  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
   const [showOnlyOficiais, setShowOnlyOficiais] = useState(false);
-
-  useEffect(
-    () => subscribeMeusProjetosChanged(() => setStorageTick((t) => t + 1)),
-    []
-  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !isAuthenticated) return;
@@ -79,47 +67,31 @@ export default function ProjetosPage() {
     }
   }, [isAuthenticated, router]);
 
+  const projectsQuery = useProjects({
+    q: searchQuery.trim() || undefined,
+    pageSize: 50,
+  });
+
+  const allProjetos = useMemo(() => {
+    return (projectsQuery.data?.items ?? []).map(mapProjectToProjeto);
+  }, [projectsQuery.data]);
+
   const filteredProjetos = useMemo(() => {
-    void storageTick;
-    const pub = listProjetosPublicadosUsuario();
-    const byId = new Map(mockProjetos.map((p) => [p.id, p]));
-    for (const p of pub) {
-      if (!byId.has(p.id)) byId.set(p.id, p);
-    }
-    let result = [...byId.values()];
+    let result = allProjetos;
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (p) =>
-          p.nome.toLowerCase().includes(query) ||
-          p.descricao.toLowerCase().includes(query) ||
-          p.responsavel.toLowerCase().includes(query)
-      );
-    }
-
-    // Tipo filter
     if (tipoFilter !== FILTER_TODOS) {
       result = result.filter((p) => p.tipo === tipoFilter);
     }
-
-    // Area filter
     if (areaFilter !== FILTER_TODOS) {
       result = result.filter((p) =>
-        p.areasAtuacao.includes(areaFilter as AreaAtuacao)
+        p.areasAtuacao.includes(areaFilter as AreaAtuacao),
       );
     }
-
-    // Oficiais filter
     if (showOnlyOficiais) {
       result = result.filter((p) => p.isOficial);
     }
-
-    result.sort((a, b) => compareListSort(a, b, sortBy));
-
-    return result;
-  }, [searchQuery, sortBy, tipoFilter, areaFilter, showOnlyOficiais, storageTick]);
+    return [...result].sort((a, b) => compareListSort(a, b, sortBy));
+  }, [allProjetos, sortBy, tipoFilter, areaFilter, showOnlyOficiais]);
 
   const clearFilters = () => {
     setTipoFilter(FILTER_TODOS);
@@ -195,7 +167,6 @@ export default function ProjetosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Breadcrumb */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -208,7 +179,6 @@ export default function ProjetosPage() {
         </div>
       </div>
 
-      {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
           <div className="flex items-center justify-between">
@@ -236,11 +206,10 @@ export default function ProjetosPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {/* Search and Sort */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full max-w-md items-center gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar projetos..."
                 value={searchQuery}
@@ -248,9 +217,6 @@ export default function ProjetosPage() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" size="icon">
-              <Search className="h-4 w-4" />
-            </Button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -274,7 +240,6 @@ export default function ProjetosPage() {
           </div>
         </div>
 
-        {/* Mobile Filter Button */}
         <div className="mb-6 md:hidden">
           <Sheet>
             <SheetTrigger asChild>
@@ -295,125 +260,117 @@ export default function ProjetosPage() {
         </div>
 
         <div className="flex gap-8">
-          {/* Projetos List */}
           <div className="flex-1 space-y-4">
-            {filteredProjetos.map((projeto) => (
-              <Card key={projeto.id} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex flex-col md:flex-row">
-                    {projeto.imagem && (
-                      <div className="relative h-48 w-full md:h-auto md:w-64 shrink-0">
-                        <Image
-                          src={projeto.imagem}
-                          alt={projeto.nome}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                    )}
-                    <div className="flex-1 p-6">
-                      <div className="mb-2 flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          {!projeto.imagem && (
-                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20">
-                              <FolderKanban className="h-6 w-6 text-primary" />
+            <QueryState
+              isLoading={projectsQuery.isLoading}
+              error={projectsQuery.error}
+              onRetry={() => projectsQuery.refetch()}
+              isEmpty={filteredProjetos.length === 0}
+              emptyMessage="Nenhum projeto encontrado"
+            >
+              <div className="space-y-4">
+                {filteredProjetos.map((projeto) => (
+                  <Card key={projeto.id} className="overflow-hidden">
+                    <CardContent className="p-0">
+                      <div className="flex flex-col md:flex-row">
+                        <div className="flex-1 p-6">
+                          <div className="mb-2 flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/20">
+                                <FolderKanban className="h-6 w-6 text-primary" />
+                              </div>
+                              <div>
+                                <Link
+                                  href={`/projetos/${projeto.id}`}
+                                  className="text-lg font-semibold text-primary hover:underline"
+                                >
+                                  {projeto.nome}
+                                </Link>
+                                <p className="text-sm text-muted-foreground">
+                                  TIPO:{" "}
+                                  <span className="text-primary">
+                                    {
+                                      TIPO_PROJETO_LABELS[
+                                        projeto.tipo as TipoProjeto
+                                      ]
+                                    }
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              {projeto.isOficial && (
+                                <BadgeCheck className="h-5 w-5 text-primary" />
+                              )}
+                            </div>
+                          </div>
+
+                          {projeto.descricao && (
+                            <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
+                              {projeto.descricao}
+                            </p>
+                          )}
+
+                          {projeto.responsavel && (
+                            <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                              <User className="h-4 w-4" />
+                              <span>Responsável: {projeto.responsavel}</span>
                             </div>
                           )}
-                          <div>
-                            <Link
-                              href={`/projetos/${projeto.id}`}
-                              className="text-lg font-semibold text-primary hover:underline"
-                            >
-                              {projeto.nome}
-                            </Link>
-                            <p className="text-sm text-muted-foreground">
-                              TIPO:{" "}
-                              <span className="text-primary">
-                                {TIPO_PROJETO_LABELS[projeto.tipo as TipoProjeto]}
+
+                          {(projeto.dataInicio || projeto.dataFim) && (
+                            <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                              <Calendar className="h-4 w-4" />
+                              <span>
+                                {projeto.dataInicio && formatDate(projeto.dataInicio)}
+                                {projeto.dataFim && ` - ${formatDate(projeto.dataFim)}`}
                               </span>
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          ID: {projeto.id}
-                          {projeto.isOficial && (
-                            <BadgeCheck className="h-5 w-5 text-primary" />
+                            </div>
                           )}
+
+                          {projeto.parceiros && projeto.parceiros.length > 0 && (
+                            <p className="mb-3 text-sm text-muted-foreground">
+                              <span className="font-medium">Parceiros:</span>{" "}
+                              {projeto.parceiros.join(", ")}
+                            </p>
+                          )}
+
+                          {projeto.areasAtuacao.length > 0 && (
+                            <div className="mb-4">
+                              <p className="mb-1 text-xs text-muted-foreground">
+                                ÁREAS DE ATUAÇÃO: ({projeto.areasAtuacao.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {projeto.areasAtuacao.map((area, index) => (
+                                  <span
+                                    key={area}
+                                    className="text-xs text-primary"
+                                  >
+                                    {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
+                                    {index < projeto.areasAtuacao.length - 1
+                                      ? ","
+                                      : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <Link href={`/projetos/${projeto.id}`}>
+                            <Button className="w-full md:w-auto">
+                              Acessar
+                              <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
+                          </Link>
                         </div>
                       </div>
-
-                      <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
-                        {projeto.descricao}
-                      </p>
-
-                      <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                        <User className="h-4 w-4" />
-                        <span>Responsável: {projeto.responsavel}</span>
-                      </div>
-
-                      {(projeto.dataInicio || projeto.dataFim) && (
-                        <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>
-                            {projeto.dataInicio && formatDate(projeto.dataInicio)}
-                            {projeto.dataFim && ` - ${formatDate(projeto.dataFim)}`}
-                          </span>
-                        </div>
-                      )}
-
-                      {projeto.parceiros && projeto.parceiros.length > 0 && (
-                        <p className="mb-3 text-sm text-muted-foreground">
-                          <span className="font-medium">Parceiros:</span>{" "}
-                          {projeto.parceiros.join(", ")}
-                        </p>
-                      )}
-
-                      <div className="mb-4">
-                        <p className="mb-1 text-xs text-muted-foreground">
-                          ÁREAS DE ATUAÇÃO: ({projeto.areasAtuacao.length})
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {projeto.areasAtuacao.map((area, index) => (
-                            <Link
-                              key={area}
-                              href={`/projetos?area=${area}`}
-                              className="text-xs text-primary hover:underline"
-                            >
-                              {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
-                              {index < projeto.areasAtuacao.length - 1 ? "," : ""}
-                            </Link>
-                          ))}
-                        </div>
-                      </div>
-
-                      <Link href={`/projetos/${projeto.id}`}>
-                        <Button className="w-full md:w-auto">
-                          Acessar
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {filteredProjetos.length === 0 && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <FolderKanban className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-                  <h3 className="mb-2 font-semibold text-foreground">
-                    Nenhum projeto encontrado
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Tente ajustar os filtros ou a busca
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </QueryState>
           </div>
 
-          {/* Desktop Filters Sidebar */}
           <aside className="hidden w-72 shrink-0 md:block">
             <Card className="sticky top-24">
               <CardContent className="p-6">
@@ -430,26 +387,7 @@ export default function ProjetosPage() {
       <CreateProjetoDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCriadoRascunho={(id) => {
-          setLastCreatedId(id);
-          setDraftDialogOpen(true);
-        }}
-        onCriadoPublicado={(id) => router.push(`/projetos/${id}`)}
-      />
-
-      <DraftCreatedDialog
-        open={draftDialogOpen}
-        onOpenChange={setDraftDialogOpen}
-        titulo="Projeto criado em rascunho"
-        nomeSecaoMeus="Meus projetos"
-        verItemLabel="Ver projeto"
-        onVer={() => {
-          if (lastCreatedId) router.push(`/projetos/${lastCreatedId}`);
-        }}
-        onCompletarDepois={() => router.push("/projetos/meus")}
-        onCompletarInformacoes={() => {
-          if (lastCreatedId) router.push(`/projetos/${lastCreatedId}/editar`);
-        }}
+        onCriado={(id) => router.push(`/projetos/${id}`)}
       />
     </div>
   );

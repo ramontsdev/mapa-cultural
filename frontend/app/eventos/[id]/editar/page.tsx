@@ -1,5 +1,14 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { ChevronRight, Loader2, Plus, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
+import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
 import {
   AlertDialog,
@@ -30,88 +39,56 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useMyAgent } from "@/hooks/api/use-agents";
 import {
-  getMeuEventoById,
-  removeMeuEvento,
-  subscribeMeusEventosChanged,
-  upsertMeuEvento,
-} from "@/lib/meus-eventos-storage";
+  useDeleteEvent,
+  useEvent,
+  useUpdateEvent,
+} from "@/hooks/api/use-events";
+import { ApiError } from "@/lib/api/http";
+import {
+  formatMetadata,
+  mapEventToEvento,
+  type EventDTO,
+} from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   CLASSIFICACAO_LABELS,
   type AreaAtuacao,
   type ClassificacaoEtaria,
-  type Evento,
-  type MeuEventoRecord,
 } from "@/lib/types";
 import {
   meuEventoEdicaoSchema,
   type MeuEventoEdicaoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronRight, Plus, Trash2, X } from "lucide-react";
-import Link from "next/link";
-import { notFound, useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
 
-function recordToFormValues(rec: MeuEventoRecord): MeuEventoEdicaoFormData {
-  const e = rec.evento;
+function dtoToFormValues(dto: EventDTO): MeuEventoEdicaoFormData {
+  const evento = mapEventToEvento(dto);
   return {
-    nome: e.nome,
-    descricao: e.descricao,
-    dataInicio: e.dataInicio,
-    dataFim: e.dataFim ?? "",
-    horario: e.horario,
-    classificacao: e.classificacao,
-    entrada: e.entrada,
-    preco: e.preco != null ? String(e.preco) : "",
-    areasAtuacao: [...e.areasAtuacao],
-    lugarId: e.lugarId ?? "",
-    tags: e.tags.length ? e.tags.join(", ") : "",
-    imagem: e.imagem ?? "",
+    nome: evento.nome,
+    descricao: evento.descricao,
+    dataInicio: evento.dataInicio,
+    dataFim: evento.dataFim ?? "",
+    horario: evento.horario,
+    classificacao: evento.classificacao,
+    entrada: evento.entrada,
+    preco: evento.preco != null ? String(evento.preco) : "",
+    areasAtuacao: [...evento.areasAtuacao],
+    lugarId: "",
+    tags: evento.tags.length ? evento.tags.join(", ") : "",
+    imagem: evento.imagem ?? "",
   };
 }
 
-function formToEvento(data: MeuEventoEdicaoFormData, base: Evento): Evento {
-  const preco =
-    data.entrada === "pago" && data.preco?.trim()
-      ? parseFloat(data.preco.replace(",", "."))
-      : undefined;
-  const tags = (data.tags ?? "")
-    .split(/[,;]+/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-  return {
-    ...base,
-    nome: data.nome,
-    descricao: data.descricao,
-    dataInicio: data.dataInicio,
-    dataFim: data.dataFim?.trim() || undefined,
-    horario: data.horario,
-    classificacao: data.classificacao,
-    entrada: data.entrada,
-    preco,
-    areasAtuacao: data.areasAtuacao,
-    tags,
-    imagem: data.imagem?.trim() || undefined,
-    lugarId: data.lugarId?.trim() || undefined,
-  };
-}
-
-function EditarMeuEventoForm({
-  record,
-  id,
-}: {
-  record: MeuEventoRecord;
-  id: string;
-}) {
+function EditarEventoForm({ dto, id }: { dto: EventDTO; id: string }) {
   const router = useRouter();
+  const updateMutation = useUpdateEvent(id);
+  const deleteMutation = useDeleteEvent();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const form = useForm<MeuEventoEdicaoFormData>({
     resolver: zodResolver(meuEventoEdicaoSchema),
-    defaultValues: recordToFormValues(record),
+    defaultValues: dtoToFormValues(dto),
   });
 
   const areas = form.watch("areasAtuacao");
@@ -128,7 +105,7 @@ function EditarMeuEventoForm({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -136,17 +113,56 @@ function EditarMeuEventoForm({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const salvar = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      const next: MeuEventoRecord = {
-        ...record,
-        status,
-        evento: formToEvento(data, record.evento),
-      };
-      upsertMeuEvento(next);
-      if (status === "published") router.push(`/eventos/${id}`);
+  const salvar = () => {
+    void form.handleSubmit(async (data) => {
+      try {
+        const tags = (data.tags ?? "")
+          .split(/[,;]+/)
+          .map((t) => t.trim())
+          .filter(Boolean);
+
+        const shortDescription = formatMetadata(data.descricao, {
+          dataInicio: data.dataInicio,
+          dataFim: data.dataFim?.trim() || undefined,
+          horario: data.horario,
+          classificacao: data.classificacao,
+          entrada: data.entrada,
+          preco: data.entrada === "pago" ? data.preco : undefined,
+          areas: data.areasAtuacao.join(","),
+          tags: tags.join(","),
+          imagem: data.imagem?.trim() || undefined,
+        });
+
+        await updateMutation.mutateAsync({
+          name: data.nome,
+          shortDescription,
+        });
+
+        toast.success("Evento atualizado.");
+        router.push(`/eventos/${id}`);
+      } catch (error) {
+        toast.error(
+          error instanceof ApiError
+            ? error.message
+            : "Não foi possível salvar.",
+        );
+      }
     })();
   };
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast.success("Evento excluído.");
+      router.push("/eventos/meus");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError ? error.message : "Não foi possível excluir.",
+      );
+    }
+  };
+
+  const isSaving = updateMutation.isPending;
 
   return (
     <>
@@ -248,7 +264,7 @@ function EditarMeuEventoForm({
                           <SelectContent>
                             {(
                               Object.entries(
-                                CLASSIFICACAO_LABELS
+                                CLASSIFICACAO_LABELS,
                               ) as [ClassificacaoEtaria, string][]
                             ).map(([value, label]) => (
                               <SelectItem key={value} value={value}>
@@ -346,22 +362,6 @@ function EditarMeuEventoForm({
                 />
                 <FormField
                   control={form.control}
-                  name="lugarId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>ID do espaço (opcional)</FormLabel>
-                      <FormControl>
-                        <Input
-                          {...field}
-                          placeholder="UUID de um espaço no mapa"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name="tags"
                   render={({ field }) => (
                     <FormItem>
@@ -380,7 +380,11 @@ function EditarMeuEventoForm({
                     <FormItem>
                       <FormLabel>URL da imagem (opcional)</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input
+                          placeholder="https://…"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -390,17 +394,17 @@ function EditarMeuEventoForm({
             </Form>
 
             <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:flex-wrap">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => salvar("draft")}
-              >
-                Salvar rascunho
+              <Button type="button" onClick={salvar} disabled={isSaving}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando…
+                  </>
+                ) : (
+                  "Salvar"
+                )}
               </Button>
-              <Button type="button" onClick={() => salvar("published")}>
-                Publicar
-              </Button>
-              <Button variant="ghost" className="text-destructive" asChild>
+              <Button variant="ghost" asChild>
                 <Link href={`/eventos/${id}`}>Cancelar</Link>
               </Button>
               <Button
@@ -408,6 +412,7 @@ function EditarMeuEventoForm({
                 variant="destructive"
                 className="sm:ml-auto"
                 onClick={() => setDeleteOpen(true)}
+                disabled={deleteMutation.isPending}
               >
                 <Trash2 className="mr-2 h-4 w-4" />
                 Excluir
@@ -422,18 +427,14 @@ function EditarMeuEventoForm({
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir evento?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação remove o cadastro deste dispositivo. Não é possível
-              desfazer.
+              Essa ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                removeMeuEvento(id);
-                router.push("/eventos/meus");
-              }}
+              onClick={handleDelete}
             >
               Excluir
             </AlertDialogAction>
@@ -445,22 +446,22 @@ function EditarMeuEventoForm({
 }
 
 export default function EditarMeuEventoPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => subscribeMeusEventosChanged(() => setTick((t) => t + 1)), []);
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace("/cadastro");
-  }, [isAuthenticated, router]);
+    if (!isAuthLoading && !isAuthenticated) router.replace("/cadastro");
+  }, [isAuthenticated, isAuthLoading, router]);
 
-  const record = useMemo(() => {
-    void tick;
-    return getMeuEventoById(id);
-  }, [id, tick]);
+  const eventQuery = useEvent(id);
+  const meQuery = useMyAgent({ enabled: isAuthenticated });
+
+  const canEdit = useMemo(() => {
+    if (!eventQuery.data || !meQuery.data) return false;
+    return eventQuery.data.agentId === meQuery.data.id;
+  }, [eventQuery.data, meQuery.data]);
 
   if (!isAuthenticated) {
     return (
@@ -468,10 +469,6 @@ export default function EditarMeuEventoPage() {
         Redirecionando…
       </div>
     );
-  }
-
-  if (!record) {
-    notFound();
   }
 
   return (
@@ -491,7 +488,26 @@ export default function EditarMeuEventoPage() {
           </nav>
         </div>
       </div>
-      <EditarMeuEventoForm record={record} id={id} />
+      <QueryState
+        isLoading={eventQuery.isLoading || meQuery.isLoading}
+        error={eventQuery.error ?? meQuery.error}
+        onRetry={() => eventQuery.refetch()}
+        isEmpty={!eventQuery.data}
+        emptyMessage="Evento não encontrado"
+      >
+        {eventQuery.data && !canEdit && (
+          <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Você não tem permissão para editar este evento.
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        {eventQuery.data && canEdit && (
+          <EditarEventoForm dto={eventQuery.data} id={id} />
+        )}
+      </QueryState>
     </div>
   );
 }

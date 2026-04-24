@@ -1,5 +1,12 @@
 "use client";
 
+import { ChevronRight, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
 import {
   AlertDialog,
@@ -13,389 +20,45 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMyAgent } from "@/hooks/api/use-agents";
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  getMeuOportunidadeById,
-  removeMeuOportunidade,
-  subscribeMeusOportunidadesChanged,
-  upsertMeuOportunidade,
-} from "@/lib/meus-oportunidades-storage";
-import {
-  AREA_ATUACAO_LABELS,
-  TIPO_OPORTUNIDADE_LABELS,
-  type AreaAtuacao,
-  type MeuOportunidadeRecord,
-  type Oportunidade,
-  type TipoOportunidade,
-} from "@/lib/types";
-import {
-  meuOportunidadeEdicaoSchema,
-  type MeuOportunidadeEdicaoFormData,
-} from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronRight, Plus, Trash2, X } from "lucide-react";
-import Link from "next/link";
-import { notFound, useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
-
-function recordToFormValues(
-  rec: MeuOportunidadeRecord
-): MeuOportunidadeEdicaoFormData {
-  const o = rec.oportunidade;
-  return {
-    nome: o.nome,
-    tipo: o.tipo,
-    descricao: o.descricao,
-    dataInscricaoInicio: o.dataInscricaoInicio,
-    dataInscricaoFim: o.dataInscricaoFim,
-    areasInteresse: [...o.areasInteresse],
-    requisitos: o.requisitos ?? "",
-    valorPremio:
-      o.valorPremio != null ? String(o.valorPremio) : "",
-    link: o.link ?? "",
-  };
-}
-
-function formToOportunidade(
-  data: MeuOportunidadeEdicaoFormData,
-  base: Oportunidade
-): Oportunidade {
-  const vp = data.valorPremio?.trim();
-  const valorPremio =
-    vp && !Number.isNaN(parseFloat(vp.replace(",", ".")))
-      ? parseFloat(vp.replace(",", "."))
-      : undefined;
-  return {
-    ...base,
-    nome: data.nome,
-    tipo: data.tipo as TipoOportunidade,
-    descricao: data.descricao,
-    dataInscricaoInicio: data.dataInscricaoInicio,
-    dataInscricaoFim: data.dataInscricaoFim,
-    areasInteresse: data.areasInteresse,
-    requisitos: data.requisitos?.trim() || undefined,
-    valorPremio,
-    link: data.link?.trim() || undefined,
-  };
-}
-
-function EditarMeuOportunidadeForm({
-  record,
-  id,
-}: {
-  record: MeuOportunidadeRecord;
-  id: string;
-}) {
-  const router = useRouter();
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
-  const form = useForm<MeuOportunidadeEdicaoFormData>({
-    resolver: zodResolver(meuOportunidadeEdicaoSchema),
-    defaultValues: recordToFormValues(record),
-  });
-
-  const areas = form.watch("areasInteresse");
-
-  const addArea = (a: AreaAtuacao) => {
-    const cur = form.getValues("areasInteresse");
-    if (cur.includes(a)) return;
-    form.setValue("areasInteresse", [...cur, a], { shouldValidate: true });
-  };
-
-  const removeArea = (a: AreaAtuacao) => {
-    const cur = form.getValues("areasInteresse");
-    form.setValue(
-      "areasInteresse",
-      cur.filter((x) => x !== a),
-      { shouldValidate: true }
-    );
-  };
-
-  const areasDisponiveis = (
-    Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
-  ).filter(([k]) => !areas.includes(k));
-
-  const salvar = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      upsertMeuOportunidade({
-        ...record,
-        status,
-        oportunidade: formToOportunidade(data, record.oportunidade),
-      });
-      if (status === "published") router.push(`/oportunidades/${id}`);
-    })();
-  };
-
-  return (
-    <>
-      <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Editar oportunidade</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
-                <FormField
-                  control={form.control}
-                  name="nome"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nome</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="tipo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tipo</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {Object.entries(TIPO_OPORTUNIDADE_LABELS).map(
-                            ([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="descricao"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Descrição</FormLabel>
-                      <FormControl>
-                        <Textarea rows={4} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="dataInscricaoInicio"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Início das inscrições</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="dataInscricaoFim"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Fim das inscrições</FormLabel>
-                        <FormControl>
-                          <Input type="date" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <FormField
-                  control={form.control}
-                  name="areasInteresse"
-                  render={() => (
-                    <FormItem>
-                      <FormLabel>Áreas de interesse</FormLabel>
-                      <div className="flex flex-wrap gap-2">
-                        {areas.map((a) => (
-                          <span
-                            key={a}
-                            className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1 text-sm text-primary"
-                          >
-                            {AREA_ATUACAO_LABELS[a]}
-                            <button
-                              type="button"
-                              className="rounded p-0.5 hover:bg-primary/20"
-                              onClick={() => removeArea(a)}
-                              aria-label="Remover"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {areasDisponiveis.map(([k, label]) => (
-                          <Button
-                            key={k}
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-1"
-                            onClick={() => addArea(k)}
-                          >
-                            <Plus className="h-3 w-3" />
-                            {label}
-                          </Button>
-                        ))}
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="requisitos"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Requisitos (opcional)</FormLabel>
-                      <FormControl>
-                        <Textarea rows={3} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="valorPremio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Valor do prêmio (R$, opcional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="0" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="link"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Link oficial (opcional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} placeholder="https://..." />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </form>
-            </Form>
-
-            <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:flex-wrap">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => salvar("draft")}
-              >
-                Salvar rascunho
-              </Button>
-              <Button type="button" onClick={() => salvar("published")}>
-                Publicar
-              </Button>
-              <Button variant="ghost" asChild>
-                <Link href={`/oportunidades/${id}`}>Cancelar</Link>
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                className="sm:ml-auto"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Excluir
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir oportunidade?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Remove o cadastro deste dispositivo. Esta ação não pode ser
-              desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                removeMeuOportunidade(id);
-                router.push("/oportunidades/meus");
-              }}
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
+  useDeleteOpportunity,
+  useOpportunity,
+} from "@/hooks/api/use-opportunities";
+import { ApiError } from "@/lib/api/http";
+import { mapOpportunityToOportunidade } from "@/lib/api/types";
 
 export default function EditarMeuOportunidadePage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = params.id as string;
-  const [tick, setTick] = useState(0);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
-  useEffect(
-    () => subscribeMeusOportunidadesChanged(() => setTick((t) => t + 1)),
-    []
-  );
+  const opportunityQuery = useOpportunity(id);
+  const meQuery = useMyAgent({ enabled: isAuthenticated });
+  const deleteMutation = useDeleteOpportunity();
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace("/cadastro");
-  }, [isAuthenticated, router]);
+    if (!isAuthLoading && !isAuthenticated) router.replace("/cadastro");
+  }, [isAuthenticated, isAuthLoading, router]);
 
-  const record = useMemo(() => {
-    void tick;
-    return getMeuOportunidadeById(id);
-  }, [id, tick]);
+  const canEdit = useMemo(() => {
+    if (!opportunityQuery.data || !meQuery.data) return false;
+    return opportunityQuery.data.agentId === meQuery.data.id;
+  }, [opportunityQuery.data, meQuery.data]);
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(id);
+      toast.success("Oportunidade excluída.");
+      router.push("/oportunidades/meus");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError ? error.message : "Não foi possível excluir.",
+      );
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -405,9 +68,9 @@ export default function EditarMeuOportunidadePage() {
     );
   }
 
-  if (!record) {
-    notFound();
-  }
+  const oportunidade = opportunityQuery.data
+    ? mapOpportunityToOportunidade(opportunityQuery.data)
+    : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -422,11 +85,87 @@ export default function EditarMeuOportunidadePage() {
               Minhas oportunidades
             </Link>
             <ChevronRight className="h-4 w-4" />
-            <span className="font-medium text-foreground">Editar</span>
+            <span className="font-medium text-foreground">Gerenciar</span>
           </nav>
         </div>
       </div>
-      <EditarMeuOportunidadeForm record={record} id={id} />
+
+      <QueryState
+        isLoading={opportunityQuery.isLoading || meQuery.isLoading}
+        error={opportunityQuery.error ?? meQuery.error}
+        onRetry={() => opportunityQuery.refetch()}
+        isEmpty={!opportunityQuery.data}
+        emptyMessage="Oportunidade não encontrada"
+      >
+        {opportunityQuery.data && !canEdit && (
+          <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+            <Card>
+              <CardContent className="p-8 text-center text-muted-foreground">
+                Você não tem permissão para gerenciar esta oportunidade.
+              </CardContent>
+            </Card>
+          </div>
+        )}
+        {opportunityQuery.data && oportunidade && canEdit && (
+          <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Gerenciar oportunidade</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Nome</p>
+                  <p className="font-medium">{oportunidade.nome}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Descrição</p>
+                  <p className="whitespace-pre-wrap">
+                    {oportunidade.descricao || "—"}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  A edição detalhada de oportunidades ainda não está disponível.
+                  Você pode excluir e recriar caso precise alterar dados.
+                </p>
+                <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                  <Button variant="outline" asChild>
+                    <Link href={`/oportunidades/${id}`}>Voltar</Link>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="ml-auto"
+                    onClick={() => setDeleteOpen(true)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Excluir
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </QueryState>
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir oportunidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDelete}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

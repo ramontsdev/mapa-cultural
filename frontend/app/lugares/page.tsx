@@ -1,31 +1,5 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { CreateEspacoDialog } from "@/components/lugares/create-espaco-dialog";
-import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
-import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
-import {
-  listLugaresPublicadosUsuario,
-  subscribeMeusEspacosChanged,
-} from "@/lib/meus-espacos-storage";
-import { mockLugares } from "@/lib/mock-data";
-import {
-  AREA_ATUACAO_LABELS,
-  TIPO_LUGAR_LABELS,
-  type AreaAtuacao,
-  type TipoLugar,
-} from "@/lib/types";
 import {
   Accessibility,
   Building2,
@@ -44,13 +18,34 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { CreateEspacoDialog } from "@/components/lugares/create-espaco-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useSpaces } from "@/hooks/api/use-spaces";
+import { mapSpaceToLugar } from "@/lib/api/types";
+import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
+import {
+  AREA_ATUACAO_LABELS,
+  TIPO_LUGAR_LABELS,
+  type AreaAtuacao,
+  type TipoLugar,
+} from "@/lib/types";
+
 export default function LugaresPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const [storageTick, setStorageTick] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
-  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
   const [apenasOficiais, setApenasOficiais] = useState(false);
@@ -59,8 +54,6 @@ export default function LugaresPage() {
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
-
-  useEffect(() => subscribeMeusEspacosChanged(() => setStorageTick((t) => t + 1)), []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !isAuthenticated) return;
@@ -71,17 +64,18 @@ export default function LugaresPage() {
     }
   }, [isAuthenticated, router]);
 
+  const spacesQuery = useSpaces({
+    q: searchQuery.trim() || undefined,
+    pageSize: 50,
+  });
+
   const todosLugares = useMemo(() => {
-    void storageTick;
-    return [...mockLugares, ...listLugaresPublicadosUsuario()];
-  }, [storageTick]);
+    const items = spacesQuery.data?.items ?? [];
+    return items.map(mapSpaceToLugar);
+  }, [spacesQuery.data]);
 
   const filteredLugares = useMemo(() => {
     return todosLugares.filter((lugar) => {
-      const matchesSearch =
-        lugar.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lugar.descricao.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lugar.endereco.cidade.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesOficial = !apenasOficiais || lugar.isOficial;
       const matchesAcessibilidade =
         !possuiAcessibilidade || lugar.acessibilidade;
@@ -91,25 +85,14 @@ export default function LugaresPage() {
         lugar.areasAtuacao.includes(areaAtuacao as AreaAtuacao);
 
       return (
-        matchesSearch &&
-        matchesOficial &&
-        matchesAcessibilidade &&
-        matchesTipo &&
-        matchesArea
+        matchesOficial && matchesAcessibilidade && matchesTipo && matchesArea
       );
     });
-  }, [
-    todosLugares,
-    searchQuery,
-    apenasOficiais,
-    possuiAcessibilidade,
-    tipoLugar,
-    areaAtuacao,
-  ]);
+  }, [todosLugares, apenasOficiais, possuiAcessibilidade, tipoLugar, areaAtuacao]);
 
   const sortedLugares = useMemo(
     () => sortListByMode(filteredLugares, sortBy),
-    [filteredLugares, sortBy]
+    [filteredLugares, sortBy],
   );
 
   const clearFilters = () => {
@@ -123,7 +106,6 @@ export default function LugaresPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Breadcrumb */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -136,10 +118,8 @@ export default function LugaresPage() {
         </div>
       </div>
 
-      {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-secondary p-2">
@@ -162,7 +142,6 @@ export default function LugaresPage() {
             )}
           </div>
 
-          {/* View Toggle and Search */}
           <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">
@@ -192,7 +171,7 @@ export default function LugaresPage() {
 
             <div className="flex gap-2">
               <div className="relative flex-1 lg:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Buscar espaços..."
                   value={searchQuery}
@@ -213,12 +192,9 @@ export default function LugaresPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Main Content */}
           <div className="flex-1">
-            {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <Select
                 value={sortBy}
@@ -240,125 +216,124 @@ export default function LugaresPage() {
               </span>
             </div>
 
-            {/* Places List */}
             {viewMode === "lista" ? (
-              <div className="space-y-4">
-                {sortedLugares.map((lugar) => (
-                  <Card
-                    key={lugar.id}
-                    className="overflow-hidden transition-shadow hover:shadow-md"
-                  >
-                    <CardContent className="p-0">
-                      <div className="flex flex-col md:flex-row">
-                        {/* Image */}
-                        <div className="relative h-48 w-full md:h-auto md:w-48">
-                          <Image
-                            src={lugar.imagem || "/placeholder.svg"}
-                            alt={lugar.nome}
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 p-5">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <Link
-                                href={`/lugares/${lugar.id}`}
-                                className="group"
-                              >
-                                <h3 className="text-lg font-semibold text-primary group-hover:underline">
-                                  {lugar.nome}
-                                </h3>
-                              </Link>
-                              <p className="text-sm text-secondary">
-                                Tipo:{" "}
-                                {TIPO_LUGAR_LABELS[lugar.tipo as TipoLugar]}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {lugar.isOficial && (
-                                <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                                  <CheckCircle2 className="h-3 w-3" />
-                                  Oficial
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
-                            <MapPin className="h-4 w-4 shrink-0" />
-                            {lugar.endereco.logradouro}, {lugar.endereco.numero}{" "}
-                            - {lugar.endereco.bairro} -{" "}
-                            {lugar.endereco.cidade}/{lugar.endereco.estado} -
-                            CEP: {lugar.endereco.cep}
-                          </p>
-
-                          <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
-                            {lugar.descricao}
-                          </p>
-
-                          <div className="mt-3 flex items-center gap-4 text-sm">
-                            <span className="flex items-center gap-1">
-                              <strong>Acessibilidade:</strong>{" "}
-                              {lugar.acessibilidade ? (
-                                <span className="flex items-center gap-1 text-primary">
-                                  <Accessibility className="h-4 w-4" />
-                                  Sim
-                                </span>
-                              ) : (
-                                "Não"
-                              )}
-                            </span>
-                          </div>
-
-                          <div className="mt-3">
-                            <span className="text-sm font-medium">
-                              Áreas de Atuação ({lugar.areasAtuacao.length}):
-                            </span>
-                            <div className="mt-1 flex flex-wrap gap-2">
-                              {lugar.areasAtuacao.map((area) => (
-                                <span
-                                  key={area}
-                                  className="rounded-full bg-secondary/10 px-2 py-1 text-xs font-medium text-secondary"
-                                >
-                                  {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <Link href={`/lugares/${lugar.id}`}>
-                              <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
-                                Acessar
-                                <ChevronRight className="ml-1 h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {filteredLugares.length === 0 && (
-                  <div className="py-12 text-center">
-                    <Building2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-4 text-lg text-muted-foreground">
-                      Nenhum espaço encontrado
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={clearFilters}
+              <QueryState
+                isLoading={spacesQuery.isLoading}
+                error={spacesQuery.error}
+                onRetry={() => spacesQuery.refetch()}
+                isEmpty={filteredLugares.length === 0}
+                emptyMessage="Nenhum espaço encontrado"
+              >
+                <div className="space-y-4">
+                  {sortedLugares.map((lugar) => (
+                    <Card
+                      key={lugar.id}
+                      className="overflow-hidden transition-shadow hover:shadow-md"
                     >
-                      Limpar filtros
-                    </Button>
-                  </div>
-                )}
-              </div>
+                      <CardContent className="p-0">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="relative h-48 w-full md:h-auto md:w-48">
+                            <Image
+                              src="/placeholder.svg"
+                              alt={lugar.nome}
+                              fill
+                              className="object-cover"
+                            />
+                          </div>
+
+                          <div className="flex-1 p-5">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <Link
+                                  href={`/lugares/${lugar.id}`}
+                                  className="group"
+                                >
+                                  <h3 className="text-lg font-semibold text-primary group-hover:underline">
+                                    {lugar.nome}
+                                  </h3>
+                                </Link>
+                                <p className="text-sm text-secondary">
+                                  Tipo:{" "}
+                                  {TIPO_LUGAR_LABELS[lugar.tipo as TipoLugar]}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {lugar.isOficial && (
+                                  <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Oficial
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {(lugar.endereco.logradouro || lugar.endereco.cidade) && (
+                              <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
+                                <MapPin className="h-4 w-4 shrink-0" />
+                                {[
+                                  lugar.endereco.logradouro,
+                                  lugar.endereco.bairro,
+                                  lugar.endereco.cidade,
+                                  lugar.endereco.estado,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" - ")}
+                              </p>
+                            )}
+
+                            {lugar.descricao && (
+                              <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+                                {lugar.descricao}
+                              </p>
+                            )}
+
+                            {lugar.areasAtuacao.length > 0 && (
+                              <div className="mt-3">
+                                <span className="text-sm font-medium">
+                                  Áreas de Atuação ({lugar.areasAtuacao.length}):
+                                </span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {lugar.areasAtuacao.map((area) => (
+                                    <span
+                                      key={area}
+                                      className="rounded-full bg-secondary/10 px-2 py-1 text-xs font-medium text-secondary"
+                                    >
+                                      {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-3 flex items-center gap-4 text-sm">
+                              <span className="flex items-center gap-1">
+                                <strong>Acessibilidade:</strong>{" "}
+                                {lugar.acessibilidade ? (
+                                  <span className="flex items-center gap-1 text-primary">
+                                    <Accessibility className="h-4 w-4" />
+                                    Sim
+                                  </span>
+                                ) : (
+                                  "Não"
+                                )}
+                              </span>
+                            </div>
+
+                            <div className="mt-4">
+                              <Link href={`/lugares/${lugar.id}`}>
+                                <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
+                                  Acessar
+                                  <ChevronRight className="ml-1 h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </QueryState>
             ) : (
               <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
                 <Map className="mx-auto h-16 w-16 text-muted-foreground/50" />
@@ -369,10 +344,8 @@ export default function LugaresPage() {
             )}
           </div>
 
-          {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
-              }`}
+            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"}`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">
@@ -391,7 +364,6 @@ export default function LugaresPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Status */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Status do espaço</h4>
                     <div className="space-y-2">
@@ -422,7 +394,6 @@ export default function LugaresPage() {
                     </div>
                   </div>
 
-                  {/* Tipo de Espaço */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Tipos de espaços</h4>
                     <Select value={tipoLugar} onValueChange={setTipoLugar}>
@@ -436,13 +407,12 @@ export default function LugaresPage() {
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Área de Atuação */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Área de atuação</h4>
                     <Select value={areaAtuacao} onValueChange={setAreaAtuacao}>
@@ -456,13 +426,12 @@ export default function LugaresPage() {
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Clear Filters */}
                   <Button
                     variant="link"
                     className="h-auto p-0 text-primary"
@@ -480,27 +449,8 @@ export default function LugaresPage() {
       <CreateEspacoDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCriadoRascunho={(id) => {
-          setLastCreatedId(id);
-          setDraftDialogOpen(true);
-        }}
-        onCriadoPublicado={(id) => {
+        onCriado={(id) => {
           router.push(`/lugares/${id}`);
-        }}
-      />
-
-      <DraftCreatedDialog
-        open={draftDialogOpen}
-        onOpenChange={setDraftDialogOpen}
-        titulo="Espaço criado em rascunho"
-        nomeSecaoMeus="Meus espaços"
-        verItemLabel="Ver espaço"
-        onVer={() => {
-          if (lastCreatedId) router.push(`/lugares/${lastCreatedId}`);
-        }}
-        onCompletarDepois={() => router.push("/lugares/meus")}
-        onCompletarInformacoes={() => {
-          if (lastCreatedId) router.push(`/lugares/${lastCreatedId}/editar`);
         }}
       />
     </div>

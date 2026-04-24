@@ -9,7 +9,15 @@ export class GetEventByIdController implements IController {
 
     if (!id) return notFound({ error: 'Evento não encontrado' });
 
-    const event = await prismaClient.event.findUnique({ where: { id } });
+    const event = await prismaClient.event.findUnique({
+      where: { id },
+      include: {
+        occurrences: {
+          orderBy: [{ startsOn: 'asc' }, { startsAt: 'asc' }],
+          include: { space: true },
+        },
+      },
+    });
 
     if (!event) return notFound({ error: 'Evento não encontrado' });
 

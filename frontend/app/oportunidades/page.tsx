@@ -1,27 +1,31 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  ChevronRight,
-  Search,
-  Lightbulb,
-  Calendar,
-  CheckCircle,
-  Clock,
-  XCircle,
-  Filter,
   ArrowRight,
   Award,
   BadgeCheck,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  Filter,
+  Lightbulb,
   Plus,
+  Search,
+  XCircle,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { CreateOportunidadeDialog } from "@/components/recursos/create-oportunidade-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -36,48 +40,39 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useAuth } from "@/components/auth-provider";
-import { CreateOportunidadeDialog } from "@/components/recursos/create-oportunidade-dialog";
-import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
+import { useOpportunities } from "@/hooks/api/use-opportunities";
+import { mapOpportunityToOportunidade } from "@/lib/api/types";
 import {
-  listOportunidadesPublicadasUsuario,
-  subscribeMeusOportunidadesChanged,
-} from "@/lib/meus-oportunidades-storage";
-import { compareListSort, type ListSortBy } from "@/lib/list-sort";
-import {
-  mockOportunidades,
-  getStatusOportunidade,
-} from "@/lib/mock-data";
-import {
-  TIPO_OPORTUNIDADE_LABELS,
   AREA_ATUACAO_LABELS,
-  type TipoOportunidade,
+  TIPO_OPORTUNIDADE_LABELS,
   type AreaAtuacao,
+  type Oportunidade,
+  type TipoOportunidade,
 } from "@/lib/types";
 
-/** Valor sentinela para o Select (Radix não permite `value=""` em SelectItem). */
 const FILTER_TODOS = "__todos__";
 
-type SortOportunidades = ListSortBy | "encerramento";
+type SortOportunidades = "recentes" | "antigos" | "nome" | "nome-desc" | "encerramento";
+
+function statusFrom(o: Oportunidade): "aberta" | "futura" | "encerrada" {
+  const now = Date.now();
+  const from = new Date(o.dataInscricaoInicio).getTime();
+  const to = new Date(o.dataInscricaoFim).getTime();
+  if (now < from) return "futura";
+  if (now > to) return "encerrada";
+  return "aberta";
+}
 
 export default function OportunidadesPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const [storageTick, setStorageTick] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
-  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOportunidades>("recentes");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [tipoFilter, setTipoFilter] = useState<string>(FILTER_TODOS);
   const [areaFilter, setAreaFilter] = useState<string>(FILTER_TODOS);
   const [showOnlyOficiais, setShowOnlyOficiais] = useState(false);
-
-  useEffect(
-    () => subscribeMeusOportunidadesChanged(() => setStorageTick((t) => t + 1)),
-    []
-  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !isAuthenticated) return;
@@ -88,69 +83,62 @@ export default function OportunidadesPage() {
     }
   }, [isAuthenticated, router]);
 
+  const oppsQuery = useOpportunities({
+    q: searchQuery.trim() || undefined,
+    pageSize: 50,
+  });
+
+  const oportunidades = useMemo(
+    () => (oppsQuery.data?.items ?? []).map(mapOpportunityToOportunidade),
+    [oppsQuery.data],
+  );
+
   const filteredOportunidades = useMemo(() => {
-    void storageTick;
-    const pub = listOportunidadesPublicadasUsuario();
-    const byId = new Map(mockOportunidades.map((o) => [o.id, o]));
-    for (const o of pub) {
-      if (!byId.has(o.id)) byId.set(o.id, o);
-    }
-    let result = [...byId.values()];
+    let result = [...oportunidades];
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(
-        (o) =>
-          o.nome.toLowerCase().includes(query) ||
-          o.descricao.toLowerCase().includes(query)
-      );
-    }
-
-    // Status filter
     if (statusFilter.length > 0) {
-      result = result.filter((o) =>
-        statusFilter.includes(getStatusOportunidade(o))
-      );
+      result = result.filter((o) => statusFilter.includes(statusFrom(o)));
     }
 
-    // Tipo filter
     if (tipoFilter !== FILTER_TODOS) {
       result = result.filter((o) => o.tipo === tipoFilter);
     }
 
-    // Area filter
     if (areaFilter !== FILTER_TODOS) {
       result = result.filter((o) =>
-        o.areasInteresse.includes(areaFilter as AreaAtuacao)
+        o.areasInteresse.includes(areaFilter as AreaAtuacao),
       );
     }
 
-    // Oficiais filter
     if (showOnlyOficiais) {
       result = result.filter((o) => o.isOficial);
     }
 
-    if (sortBy === "encerramento") {
-      result.sort(
-        (a, b) =>
-          new Date(a.dataInscricaoFim).getTime() -
-          new Date(b.dataInscricaoFim).getTime()
-      );
-    } else {
-      result.sort((a, b) => compareListSort(a, b, sortBy));
-    }
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "encerramento":
+          return (
+            new Date(a.dataInscricaoFim).getTime() -
+            new Date(b.dataInscricaoFim).getTime()
+          );
+        case "nome":
+          return a.nome.localeCompare(b.nome, "pt-BR");
+        case "nome-desc":
+          return b.nome.localeCompare(a.nome, "pt-BR");
+        case "antigos":
+          return (
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        case "recentes":
+        default:
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+      }
+    });
 
     return result;
-  }, [
-    searchQuery,
-    sortBy,
-    statusFilter,
-    tipoFilter,
-    areaFilter,
-    showOnlyOficiais,
-    storageTick,
-  ]);
+  }, [oportunidades, sortBy, statusFilter, tipoFilter, areaFilter, showOnlyOficiais]);
 
   const clearFilters = () => {
     setStatusFilter([]);
@@ -213,7 +201,7 @@ export default function OportunidadesPage() {
                     setStatusFilter([...statusFilter, status.value]);
                   } else {
                     setStatusFilter(
-                      statusFilter.filter((s) => s !== status.value)
+                      statusFilter.filter((s) => s !== status.value),
                     );
                   }
                 }}
@@ -283,7 +271,6 @@ export default function OportunidadesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Breadcrumb */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -296,7 +283,6 @@ export default function OportunidadesPage() {
         </div>
       </div>
 
-      {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
           <div className="flex items-center justify-between">
@@ -324,11 +310,10 @@ export default function OportunidadesPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {/* Search and Sort */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="flex w-full max-w-md items-center gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Buscar oportunidades..."
                 value={searchQuery}
@@ -336,9 +321,6 @@ export default function OportunidadesPage() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" size="icon">
-              <Search className="h-4 w-4" />
-            </Button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -365,7 +347,6 @@ export default function OportunidadesPage() {
           </div>
         </div>
 
-        {/* Mobile Filter Button */}
         <div className="mb-6 md:hidden">
           <Sheet>
             <SheetTrigger asChild>
@@ -386,131 +367,119 @@ export default function OportunidadesPage() {
         </div>
 
         <div className="flex gap-8">
-          {/* Oportunidades List */}
-          <div className="flex-1 space-y-4">
-            {filteredOportunidades.map((oportunidade) => {
-              const status = getStatusOportunidade(oportunidade);
-              return (
-                <Card key={oportunidade.id} className="overflow-hidden">
-                  <CardContent className="p-6">
-                    <div className="mb-2 flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary/20">
-                          <Lightbulb className="h-6 w-6 text-secondary" />
+          <div className="flex-1">
+            <QueryState
+              isLoading={oppsQuery.isLoading}
+              error={oppsQuery.error}
+              onRetry={() => oppsQuery.refetch()}
+              isEmpty={filteredOportunidades.length === 0}
+              emptyMessage="Nenhuma oportunidade encontrada"
+            >
+              <div className="space-y-4">
+                {filteredOportunidades.map((oportunidade) => {
+                  const status = statusFrom(oportunidade);
+                  return (
+                    <Card key={oportunidade.id} className="overflow-hidden">
+                      <CardContent className="p-6">
+                        <div className="mb-2 flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-secondary/20">
+                              <Lightbulb className="h-6 w-6 text-secondary" />
+                            </div>
+                            <div>
+                              <Link
+                                href={`/oportunidades/${oportunidade.id}`}
+                                className="text-lg font-semibold text-primary hover:underline"
+                              >
+                                {oportunidade.nome}
+                              </Link>
+                              <p className="text-sm text-muted-foreground">
+                                TIPO:{" "}
+                                <span className="text-primary">
+                                  {
+                                    TIPO_OPORTUNIDADE_LABELS[
+                                      oportunidade.tipo as TipoOportunidade
+                                    ]
+                                  }
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                          {oportunidade.isOficial && (
+                            <BadgeCheck className="h-5 w-5 text-primary" />
+                          )}
                         </div>
-                        <div>
-                          <Link
-                            href={`/oportunidades/${oportunidade.id}`}
-                            className="text-lg font-semibold text-primary hover:underline"
-                          >
-                            {oportunidade.nome}
-                          </Link>
-                          <p className="text-sm text-muted-foreground">
-                            TIPO:{" "}
-                            <span className="text-primary">
-                              {
-                                TIPO_OPORTUNIDADE_LABELS[
-                                  oportunidade.tipo as TipoOportunidade
-                                ]
-                              }
+
+                        <div className="mb-3">{getStatusBadge(status)}</div>
+
+                        {status === "encerrada" && (
+                          <p className="mb-3 text-sm text-destructive">
+                            As inscrições encerraram no dia{" "}
+                            {formatDate(oportunidade.dataInscricaoFim)}
+                          </p>
+                        )}
+
+                        {status === "aberta" && (
+                          <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            Inscrições até {formatDate(oportunidade.dataInscricaoFim)}
+                          </p>
+                        )}
+
+                        {status === "futura" && (
+                          <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4" />
+                            Inscrições a partir de{" "}
+                            {formatDate(oportunidade.dataInscricaoInicio)}
+                          </p>
+                        )}
+
+                        <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
+                          {oportunidade.descricao}
+                        </p>
+
+                        {oportunidade.valorPremio && (
+                          <p className="mb-3 flex items-center gap-2 text-sm">
+                            <Award className="h-4 w-4 text-secondary" />
+                            <span className="font-medium">
+                              Prêmio: R${" "}
+                              {oportunidade.valorPremio.toLocaleString("pt-BR")}
                             </span>
                           </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        ID: {oportunidade.id}
-                        {oportunidade.isOficial && (
-                          <BadgeCheck className="h-5 w-5 text-primary" />
                         )}
-                      </div>
-                    </div>
 
-                    <div className="mb-3">{getStatusBadge(status)}</div>
+                        {oportunidade.areasInteresse.length > 0 && (
+                          <div className="mb-4">
+                            <p className="mb-1 text-xs text-muted-foreground">
+                              ÁREAS DE INTERESSE: ({oportunidade.areasInteresse.length})
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {oportunidade.areasInteresse.map((area) => (
+                                <span
+                                  key={area}
+                                  className="text-xs text-primary"
+                                >
+                                  {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-                    {status === "encerrada" && (
-                      <p className="mb-3 text-sm text-destructive">
-                        As inscrições encerraram no dia{" "}
-                        {formatDate(oportunidade.dataInscricaoFim)}
-                      </p>
-                    )}
-
-                    {status === "aberta" && (
-                      <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        Inscrições até {formatDate(oportunidade.dataInscricaoFim)}
-                      </p>
-                    )}
-
-                    {status === "futura" && (
-                      <p className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        Inscrições a partir de{" "}
-                        {formatDate(oportunidade.dataInscricaoInicio)}
-                      </p>
-                    )}
-
-                    <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
-                      {oportunidade.descricao}
-                    </p>
-
-                    {oportunidade.valorPremio && (
-                      <p className="mb-3 flex items-center gap-2 text-sm">
-                        <Award className="h-4 w-4 text-secondary" />
-                        <span className="font-medium">
-                          Prêmio: R${" "}
-                          {oportunidade.valorPremio.toLocaleString("pt-BR")}
-                        </span>
-                      </p>
-                    )}
-
-                    <div className="mb-4">
-                      <p className="mb-1 text-xs text-muted-foreground">
-                        ÁREAS DE INTERESSE: ({oportunidade.areasInteresse.length})
-                      </p>
-                      <div className="flex flex-wrap gap-1">
-                        {oportunidade.areasInteresse.map((area) => (
-                          <Link
-                            key={area}
-                            href={`/oportunidades?area=${area}`}
-                            className="text-xs text-primary hover:underline"
-                          >
-                            {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
-                            {oportunidade.areasInteresse.indexOf(area) <
-                            oportunidade.areasInteresse.length - 1
-                              ? ","
-                              : ""}
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-
-                    <Link href={`/oportunidades/${oportunidade.id}`}>
-                      <Button className="w-full">
-                        Acessar
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              );
-            })}
-
-            {filteredOportunidades.length === 0 && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Lightbulb className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
-                  <h3 className="mb-2 font-semibold text-foreground">
-                    Nenhuma oportunidade encontrada
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Tente ajustar os filtros ou a busca
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+                        <Link href={`/oportunidades/${oportunidade.id}`}>
+                          <Button className="w-full">
+                            Acessar
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </QueryState>
           </div>
 
-          {/* Desktop Filters Sidebar */}
           <aside className="hidden w-72 shrink-0 md:block">
             <Card className="sticky top-24">
               <CardContent className="p-6">
@@ -527,27 +496,7 @@ export default function OportunidadesPage() {
       <CreateOportunidadeDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCriadoRascunho={(id) => {
-          setLastCreatedId(id);
-          setDraftDialogOpen(true);
-        }}
-        onCriadoPublicado={(id) => router.push(`/oportunidades/${id}`)}
-      />
-
-      <DraftCreatedDialog
-        open={draftDialogOpen}
-        onOpenChange={setDraftDialogOpen}
-        titulo="Oportunidade criada em rascunho"
-        nomeSecaoMeus="Minhas oportunidades"
-        verItemLabel="Ver oportunidade"
-        onVer={() => {
-          if (lastCreatedId) router.push(`/oportunidades/${lastCreatedId}`);
-        }}
-        onCompletarDepois={() => router.push("/oportunidades/meus")}
-        onCompletarInformacoes={() => {
-          if (lastCreatedId)
-            router.push(`/oportunidades/${lastCreatedId}/editar`);
-        }}
+        onCriado={(id) => router.push(`/oportunidades/${id}`)}
       />
     </div>
   );

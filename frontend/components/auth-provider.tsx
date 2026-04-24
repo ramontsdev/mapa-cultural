@@ -5,53 +5,110 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-const STORAGE_KEY = "mapa-cultural-auth";
+import { fetchMe, signIn, signUp } from "@/lib/api/auth";
+import type { AppUser } from "@/lib/api/types";
+import {
+  clearStoredToken,
+  getStoredToken,
+  setStoredToken,
+  subscribeAuthChange,
+} from "@/lib/api/http";
+import { queryKeys } from "@/hooks/api/query-keys";
+
+type SignInArgs = { email: string; password: string };
+type SignUpArgs = {
+  name: string;
+  email: string;
+  document: string;
+  password: string;
+  passwordConfirmation: string;
+};
 
 type AuthContextValue = {
   isAuthenticated: boolean;
+  isLoading: boolean;
+  user: AppUser | null;
+  /** Backwards compat helper used by legacy screens. Prefer `signIn`. */
   login: () => void;
   logout: () => void;
+  signIn: (payload: SignInArgs) => Promise<AppUser>;
+  signUp: (payload: SignUpArgs) => Promise<AppUser>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const queryClient = useQueryClient();
+  const [token, setToken] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      setIsAuthenticated(localStorage.getItem(STORAGE_KEY) === "true");
-    } catch {
-      setIsAuthenticated(false);
-    }
+    setToken(getStoredToken());
+    setHydrated(true);
+    const unsubscribe = subscribeAuthChange(() => {
+      setToken(getStoredToken());
+    });
+    return unsubscribe;
   }, []);
 
+  const meQuery = useQuery<AppUser>({
+    queryKey: queryKeys.me,
+    queryFn: fetchMe,
+    enabled: Boolean(token),
+    retry: false,
+  });
+
   const login = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, "true");
-    } catch {
-      /* ignore quota / private mode */
-    }
-    setIsAuthenticated(true);
+    // Intentional no-op kept for backwards compatibility with screens that
+    // still call `login()` after a local form submission.
   }, []);
 
   const logout = useCallback(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-    setIsAuthenticated(false);
-  }, []);
+    clearStoredToken();
+    setToken(null);
+    queryClient.removeQueries({ queryKey: queryKeys.me });
+  }, [queryClient]);
+
+  const doSignIn = useCallback(
+    async (payload: SignInArgs) => {
+      const { accessToken } = await signIn(payload);
+      setStoredToken(accessToken);
+      setToken(accessToken);
+      const me = await queryClient.fetchQuery<AppUser>({
+        queryKey: queryKeys.me,
+        queryFn: fetchMe,
+      });
+      return me;
+    },
+    [queryClient],
+  );
+
+  const doSignUp = useCallback(
+    async (payload: SignUpArgs) => signUp(payload),
+    [],
+  );
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      isAuthenticated: Boolean(token),
+      isLoading: !hydrated || (Boolean(token) && meQuery.isPending),
+      user: meQuery.data ?? null,
+      login,
+      logout,
+      signIn: doSignIn,
+      signUp: doSignUp,
+    }),
+    [token, hydrated, meQuery.isPending, meQuery.data, login, logout, doSignIn, doSignUp],
+  );
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
   );
 }
 

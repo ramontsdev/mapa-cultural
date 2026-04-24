@@ -4,8 +4,12 @@ import { z } from "zod";
 export const cadastroSchema = z.object({
   nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
   email: z.string().email("Email inválido"),
-  senha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
-  confirmarSenha: z.string(),
+  documento: z
+    .string()
+    .min(11, "Informe um CPF válido")
+    .max(20, "Documento muito longo"),
+  senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+  confirmarSenha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
   isBrasileiro: z.boolean().refine((val) => val === true, {
     message: "Você precisa confirmar que é brasileiro",
   }),
@@ -22,10 +26,40 @@ export type CadastroFormData = z.infer<typeof cadastroSchema>;
 // Schema para login
 export const loginSchema = z.object({
   email: z.string().email("Email inválido"),
-  senha: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
 });
 
 export type LoginFormData = z.infer<typeof loginSchema>;
+
+// Confirmação de e-mail
+export const confirmarEmailSchema = z.object({
+  email: z.string().email("Email inválido"),
+  codigo: z.string().min(4, "Código inválido"),
+});
+
+export type ConfirmarEmailFormData = z.infer<typeof confirmarEmailSchema>;
+
+// Esqueci minha senha
+export const esqueciSenhaSchema = z.object({
+  email: z.string().email("Email inválido"),
+});
+
+export type EsqueciSenhaFormData = z.infer<typeof esqueciSenhaSchema>;
+
+// Redefinir senha
+export const redefinirSenhaSchema = z
+  .object({
+    email: z.string().email("Email inválido"),
+    codigo: z.string().min(4, "Código inválido"),
+    senha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+    confirmarSenha: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+  })
+  .refine((data) => data.senha === data.confirmarSenha, {
+    message: "As senhas não conferem",
+    path: ["confirmarSenha"],
+  });
+
+export type RedefinirSenhaFormData = z.infer<typeof redefinirSenhaSchema>;
 
 // Schema para perfil de usuário
 export const perfilSchema = z.object({

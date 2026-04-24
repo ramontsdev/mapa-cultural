@@ -1,5 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Plus, X } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,10 +31,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildNewMeuEspacoRecord,
-  upsertMeuEspaco,
-} from "@/lib/meus-espacos-storage";
+import { useCreateSpace } from "@/hooks/api/use-spaces";
+import { formatMetadata } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/http";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_LUGAR_LABELS,
@@ -39,23 +43,16 @@ import {
   criarEspacoRapidoSchema,
   type CriarEspacoRapidoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, X } from "lucide-react";
-import { useForm } from "react-hook-form";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriadoRascunho: (id: string) => void;
-  onCriadoPublicado: (id: string) => void;
+  onCriado: (id: string) => void;
 };
 
-export function CreateEspacoDialog({
-  open,
-  onOpenChange,
-  onCriadoRascunho,
-  onCriadoPublicado,
-}: Props) {
+export function CreateEspacoDialog({ open, onOpenChange, onCriado }: Props) {
+  const createMutation = useCreateSpace();
+
   const form = useForm<CriarEspacoRapidoFormData>({
     resolver: zodResolver(criarEspacoRapidoSchema),
     defaultValues: {
@@ -80,7 +77,7 @@ export function CreateEspacoDialog({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -88,10 +85,18 @@ export function CreateEspacoDialog({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const submit = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      const record = buildNewMeuEspacoRecord(data, status);
-      upsertMeuEspaco(record);
+  const submit = form.handleSubmit(async (data) => {
+    try {
+      const shortDescription = formatMetadata(data.descricao, {
+        tipo: data.tipo,
+        areas: data.areasAtuacao.join(","),
+      });
+      const space = await createMutation.mutateAsync({
+        name: data.nome,
+        isPublic: true,
+        shortDescription,
+      });
+      toast.success("Espaço criado!");
       form.reset({
         nome: "",
         tipo: "outro",
@@ -99,10 +104,15 @@ export function CreateEspacoDialog({
         descricao: "",
       });
       onOpenChange(false);
-      if (status === "draft") onCriadoRascunho(record.id);
-      else onCriadoPublicado(record.id);
-    })();
-  };
+      onCriado(space.id);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        toast.error(error.message);
+      } else {
+        toast.error("Não foi possível criar o espaço.");
+      }
+    }
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,13 +124,13 @@ export function CreateEspacoDialog({
           <DialogHeader>
             <DialogTitle>Criar espaço</DialogTitle>
             <DialogDescription>
-              Crie um espaço com informações básicas e de forma rápida. Você
-              poderá completar endereço e demais dados depois.
+              Crie um espaço com informações básicas. Você poderá completar
+              endereço e demais dados depois.
             </DialogDescription>
           </DialogHeader>
 
           <Form {...form}>
-            <form className="mt-6 space-y-5" onSubmit={(e) => e.preventDefault()}>
+            <form className="mt-6 space-y-5" onSubmit={submit}>
               <FormField
                 control={form.control}
                 name="nome"
@@ -141,21 +151,20 @@ export function CreateEspacoDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo do espaço</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Selecione o tipo" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {Object.entries(TIPO_LUGAR_LABELS).map(([value, label]) => (
-                          <SelectItem key={value} value={value}>
-                            {label}
-                          </SelectItem>
-                        ))}
+                        {Object.entries(TIPO_LUGAR_LABELS).map(
+                          ([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ),
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -248,26 +257,21 @@ export function CreateEspacoDialog({
             variant="ghost"
             className="order-last sm:order-first"
             onClick={() => onOpenChange(false)}
+            disabled={createMutation.isPending}
           >
             Cancelar
           </Button>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => submit("draft")}
-            >
-              Criar em rascunho
-            </Button>
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              onClick={() => submit("published")}
-            >
-              Criar e publicar
-            </Button>
-          </div>
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            onClick={submit}
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Criar espaço
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

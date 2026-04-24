@@ -1,21 +1,5 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
-  isMeuProjetoId,
-  resolveProjetoById,
-  subscribeMeusProjetosChanged,
-} from "@/lib/meus-projetos-storage";
-import {
-  AREA_ATUACAO_LABELS,
-  TIPO_PROJETO_LABELS,
-  type AreaAtuacao,
-  type TipoProjeto,
-} from "@/lib/types";
 import {
   BadgeCheck,
   Calendar,
@@ -27,40 +11,76 @@ import {
   User,
   Users,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { useMyAgent } from "@/hooks/api/use-agents";
+import { useProject } from "@/hooks/api/use-projects";
+import { mapProjectToProjeto } from "@/lib/api/types";
+import {
+  AREA_ATUACAO_LABELS,
+  TIPO_PROJETO_LABELS,
+  type AreaAtuacao,
+  type TipoProjeto,
+} from "@/lib/types";
 
 export function ProjetoDetalhePageClient() {
   const params = useParams();
   const id = params.id as string;
   const { isAuthenticated } = useAuth();
-  const [tick, setTick] = useState(0);
 
-  useEffect(
-    () => subscribeMeusProjetosChanged(() => setTick((t) => t + 1)),
-    []
+  const projectQuery = useProject(id);
+  const meQuery = useMyAgent({ enabled: isAuthenticated });
+
+  const projeto = useMemo(
+    () => (projectQuery.data ? mapProjectToProjeto(projectQuery.data) : null),
+    [projectQuery.data],
   );
 
-  const projeto = useMemo(() => {
-    void tick;
-    return resolveProjetoById(id);
-  }, [id, tick]);
+  const possoEditar = useMemo(() => {
+    if (!projectQuery.data || !meQuery.data) return false;
+    return projectQuery.data.agentId === meQuery.data.id;
+  }, [projectQuery.data, meQuery.data]);
+
+  if (projectQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState isLoading={true}>{null}</QueryState>
+      </div>
+    );
+  }
+
+  if (projectQuery.error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState
+          isLoading={false}
+          error={projectQuery.error}
+          onRetry={() => projectQuery.refetch()}
+        >
+          {null}
+        </QueryState>
+      </div>
+    );
+  }
 
   if (!projeto) {
     notFound();
   }
 
-  const possoEditar = isAuthenticated && isMeuProjetoId(id);
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "long",
       year: "numeric",
     });
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,56 +115,27 @@ export function ProjetoDetalhePageClient() {
         )}
       </div>
 
-      {projeto.imagem && (
-        <div className="relative h-64 w-full md:h-96">
-          <Image
-            src={projeto.imagem}
-            alt={projeto.nome}
-            fill
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
-            <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <div className="mb-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20">
+              <FolderKanban className="h-8 w-8 text-primary" />
+            </div>
+            <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-white md:text-4xl">
+                <h1 className="text-2xl font-bold text-foreground md:text-3xl">
                   {projeto.nome}
                 </h1>
                 {projeto.isOficial && (
-                  <BadgeCheck className="h-6 w-6 text-white" />
+                  <BadgeCheck className="h-6 w-6 text-primary" />
                 )}
               </div>
-              <p className="mt-2 text-white/80">
+              <p className="text-muted-foreground">
                 {TIPO_PROJETO_LABELS[projeto.tipo as TipoProjeto]}
               </p>
             </div>
           </div>
         </div>
-      )}
-
-      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        {!projeto.imagem && (
-          <div className="mb-8">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20">
-                <FolderKanban className="h-8 w-8 text-primary" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                    {projeto.nome}
-                  </h1>
-                  {projeto.isOficial && (
-                    <BadgeCheck className="h-6 w-6 text-primary" />
-                  )}
-                </div>
-                <p className="text-muted-foreground">
-                  {TIPO_PROJETO_LABELS[projeto.tipo as TipoProjeto]}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
@@ -157,7 +148,7 @@ export function ProjetoDetalhePageClient() {
               </CardHeader>
               <CardContent>
                 <p className="whitespace-pre-wrap leading-relaxed text-muted-foreground">
-                  {projeto.descricao}
+                  {projeto.descricao || "Sem descrição."}
                 </p>
               </CardContent>
             </Card>
@@ -192,11 +183,17 @@ export function ProjetoDetalhePageClient() {
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-2">
-                  {projeto.areasAtuacao.map((area) => (
-                    <Badge key={area} variant="secondary">
-                      {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
-                    </Badge>
-                  ))}
+                  {projeto.areasAtuacao.length === 0 ? (
+                    <span className="text-muted-foreground text-sm">
+                      Nenhuma área informada.
+                    </span>
+                  ) : (
+                    projeto.areasAtuacao.map((area) => (
+                      <Badge key={area} variant="secondary">
+                        {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
+                      </Badge>
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -217,19 +214,22 @@ export function ProjetoDetalhePageClient() {
                 <CardTitle>Informações</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <User className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Responsável
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {projeto.responsavel}
-                    </p>
-                  </div>
-                </div>
-
-                <Separator />
+                {projeto.responsavel && (
+                  <>
+                    <div className="flex items-start gap-3">
+                      <User className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          Responsável
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {projeto.responsavel}
+                        </p>
+                      </div>
+                    </div>
+                    <Separator />
+                  </>
+                )}
 
                 <div className="flex items-start gap-3">
                   <FolderKanban className="mt-0.5 h-5 w-5 shrink-0 text-primary" />

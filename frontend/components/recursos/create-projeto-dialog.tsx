@@ -1,5 +1,10 @@
 "use client";
 
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Loader2, Plus, X } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,37 +31,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  buildNewMeuProjetoRecord,
-  upsertMeuProjeto,
-} from "@/lib/meus-projetos-storage";
+import { useCreateProject } from "@/hooks/api/use-projects";
+import { ApiError } from "@/lib/api/http";
+import { formatMetadata } from "@/lib/api/types";
 import {
   AREA_ATUACAO_LABELS,
   TIPO_PROJETO_LABELS,
   type AreaAtuacao,
-  type TipoProjeto,
 } from "@/lib/types";
 import {
   criarProjetoRapidoSchema,
   type CriarProjetoRapidoFormData,
 } from "@/lib/validations";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, X } from "lucide-react";
-import { useForm } from "react-hook-form";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCriadoRascunho: (id: string) => void;
-  onCriadoPublicado: (id: string) => void;
+  onCriado: (id: string) => void;
 };
 
-export function CreateProjetoDialog({
-  open,
-  onOpenChange,
-  onCriadoRascunho,
-  onCriadoPublicado,
-}: Props) {
+export function CreateProjetoDialog({ open, onOpenChange, onCriado }: Props) {
+  const createMutation = useCreateProject();
+
   const form = useForm<CriarProjetoRapidoFormData>({
     resolver: zodResolver(criarProjetoRapidoSchema),
     defaultValues: {
@@ -82,7 +78,7 @@ export function CreateProjetoDialog({
     form.setValue(
       "areasAtuacao",
       cur.filter((x) => x !== a),
-      { shouldValidate: true }
+      { shouldValidate: true },
     );
   };
 
@@ -90,19 +86,18 @@ export function CreateProjetoDialog({
     Object.entries(AREA_ATUACAO_LABELS) as [AreaAtuacao, string][]
   ).filter(([k]) => !areas.includes(k));
 
-  const submit = (status: "draft" | "published") => {
-    void form.handleSubmit((data) => {
-      const record = buildNewMeuProjetoRecord(
-        {
-          nome: data.nome,
-          tipo: data.tipo as TipoProjeto,
-          descricao: data.descricao,
-          responsavel: data.responsavel,
-          areasAtuacao: data.areasAtuacao,
-        },
-        status
-      );
-      upsertMeuProjeto(record);
+  const submit = form.handleSubmit(async (data) => {
+    try {
+      const shortDescription = formatMetadata(data.descricao, {
+        tipo: data.tipo,
+        responsavel: data.responsavel,
+        areas: data.areasAtuacao.join(","),
+      });
+      const project = await createMutation.mutateAsync({
+        name: data.nome,
+        shortDescription,
+      });
+      toast.success("Projeto criado!");
       form.reset({
         nome: "",
         tipo: "oficina",
@@ -111,14 +106,19 @@ export function CreateProjetoDialog({
         areasAtuacao: [],
       });
       onOpenChange(false);
-      if (status === "draft") onCriadoRascunho(record.id);
-      else onCriadoPublicado(record.id);
-    })();
-  };
+      onCriado(project.id);
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível criar o projeto.",
+      );
+    }
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[100dvh] w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
+      <DialogContent className="flex max-h-dvh w-full max-w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden rounded-none p-0 sm:max-h-[90vh] sm:max-w-lg sm:rounded-lg">
         <div className="overflow-y-auto p-6 pb-4">
           <DialogHeader>
             <DialogTitle>Criar projeto</DialogTitle>
@@ -129,7 +129,7 @@ export function CreateProjetoDialog({
           </DialogHeader>
 
           <Form {...form}>
-            <form className="mt-6 space-y-5" onSubmit={(e) => e.preventDefault()}>
+            <form className="mt-6 space-y-5" onSubmit={submit}>
               <FormField
                 control={form.control}
                 name="nome"
@@ -150,10 +150,7 @@ export function CreateProjetoDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      value={field.value}
-                    >
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -165,7 +162,7 @@ export function CreateProjetoDialog({
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
@@ -267,21 +264,20 @@ export function CreateProjetoDialog({
             type="button"
             variant="ghost"
             onClick={() => onOpenChange(false)}
+            disabled={createMutation.isPending}
           >
             Cancelar
           </Button>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => submit("draft")}
-            >
-              Criar em rascunho
-            </Button>
-            <Button type="button" onClick={() => submit("published")}>
-              Criar e publicar
-            </Button>
-          </div>
+          <Button
+            type="button"
+            onClick={submit}
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Criar projeto
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

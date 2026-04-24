@@ -1,25 +1,9 @@
 "use client";
 
-import { MiniMapWrapper } from "@/app/lugares/[id]/mini-map-wrapper";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getEventosComLugares } from "@/lib/mock-data";
-import {
-  isMeuEspacoId,
-  resolveLugarById,
-  subscribeMeusEspacosChanged,
-} from "@/lib/meus-espacos-storage";
-import {
-  AREA_ATUACAO_LABELS,
-  TIPO_LUGAR_LABELS,
-  type AreaAtuacao,
-  type TipoLugar,
-} from "@/lib/types";
 import {
   Accessibility,
   ArrowLeft,
   Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
   Clock,
@@ -30,30 +14,68 @@ import {
   Phone,
   Share2,
 } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+
+import { MiniMapWrapper } from "@/app/lugares/[id]/mini-map-wrapper";
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMyAgent } from "@/hooks/api/use-agents";
+import { useSpace } from "@/hooks/api/use-spaces";
+import { mapSpaceToLugar } from "@/lib/api/types";
+import {
+  AREA_ATUACAO_LABELS,
+  TIPO_LUGAR_LABELS,
+  type AreaAtuacao,
+  type TipoLugar,
+} from "@/lib/types";
 
 export function LugarDetalhePageClient() {
   const params = useParams();
   const id = params.id as string;
-  const [tick, setTick] = useState(0);
+  const { isAuthenticated } = useAuth();
 
-  useEffect(() => subscribeMeusEspacosChanged(() => setTick((t) => t + 1)), []);
+  const spaceQuery = useSpace(id);
+  const meQuery = useMyAgent({ enabled: isAuthenticated });
 
-  const lugar = useMemo(() => {
-    void tick;
-    return resolveLugarById(id);
-  }, [id, tick]);
+  const lugar = useMemo(
+    () => (spaceQuery.data ? mapSpaceToLugar(spaceQuery.data) : null),
+    [spaceQuery.data],
+  );
+
+  const podeEditar = useMemo(() => {
+    if (!spaceQuery.data || !meQuery.data) return false;
+    return spaceQuery.data.agentId === meQuery.data.id;
+  }, [spaceQuery.data, meQuery.data]);
+
+  if (spaceQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState isLoading={true}>{null}</QueryState>
+      </div>
+    );
+  }
+
+  if (spaceQuery.isError) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
+        <QueryState
+          isLoading={false}
+          error={spaceQuery.error}
+          onRetry={() => spaceQuery.refetch()}
+        >
+          {null}
+        </QueryState>
+      </div>
+    );
+  }
 
   if (!lugar) {
     notFound();
   }
-
-  const eventos = getEventosComLugares().filter(
-    (evento) => evento.lugarId === lugar.id
-  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,7 +127,7 @@ export function LugarDetalhePageClient() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {isMeuEspacoId(lugar.id) && (
+              {podeEditar && (
                 <Button variant="outline" className="gap-2" asChild>
                   <Link href={`/lugares/${lugar.id}/editar`}>
                     <Pencil className="h-4 w-4" />
@@ -125,17 +147,6 @@ export function LugarDetalhePageClient() {
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-8 lg:col-span-2">
-            {lugar.imagem && (
-              <div className="relative aspect-video overflow-hidden rounded-xl">
-                <Image
-                  src={lugar.imagem}
-                  alt={lugar.nome}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            )}
-
             <Card>
               <CardHeader>
                 <CardTitle>Sobre o Espaço</CardTitle>
@@ -170,55 +181,6 @@ export function LugarDetalhePageClient() {
                 </div>
               </CardContent>
             </Card>
-
-            {eventos.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                    Eventos neste local
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {eventos.map((evento) => (
-                      <Link
-                        key={evento.id}
-                        href={`/eventos/${evento.id}`}
-                        className="group flex gap-4 rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
-                      >
-                        {evento.imagem && (
-                          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg">
-                            <Image
-                              src={evento.imagem}
-                              alt={evento.nome}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                        )}
-                        <div>
-                          <h4 className="font-semibold text-foreground group-hover:text-primary">
-                            {evento.nome}
-                          </h4>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(evento.dataInicio).toLocaleDateString(
-                              "pt-BR",
-                              {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              }
-                            )}{" "}
-                            às {evento.horario}
-                          </p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           <div className="space-y-6">

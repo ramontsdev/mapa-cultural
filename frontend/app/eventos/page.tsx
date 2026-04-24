@@ -1,35 +1,10 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { CreateEventoDialog } from "@/components/recursos/create-evento-dialog";
-import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
-import { mockEventos, mockLugares } from "@/lib/mock-data";
-import { resolveLugarById } from "@/lib/meus-espacos-storage";
-import {
-  listEventosPublicadosUsuario,
-  subscribeMeusEventosChanged,
-} from "@/lib/meus-eventos-storage";
-import {
-  AREA_ATUACAO_LABELS,
-  CLASSIFICACAO_LABELS,
-  type AreaAtuacao,
-  type ClassificacaoEtaria,
-} from "@/lib/types";
 import {
   CalendarDays,
   ChevronRight,
   Filter,
+  ImageIcon,
   List,
   Map as MapIcon,
   MapPin,
@@ -42,36 +17,70 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { QueryState } from "@/components/api/QueryState";
+import { useAuth } from "@/components/auth-provider";
+import { CreateEventoDialog } from "@/components/recursos/create-evento-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useEvents } from "@/hooks/api/use-events";
+import { mapEventToEvento } from "@/lib/api/types";
+import {
+  AREA_ATUACAO_LABELS,
+  CLASSIFICACAO_LABELS,
+  type AreaAtuacao,
+  type ClassificacaoEtaria,
+} from "@/lib/types";
+
 type SortEventos = "recentes" | "antigos" | "nome" | "nome-desc";
+
+function toDayKey(dataInicio: string): string {
+  if (!dataInicio) return "";
+  const parsed = new Date(dataInicio);
+  if (Number.isNaN(parsed.getTime())) return "";
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDayKey(dayKey: string): Date | null {
+  const parts = dayKey.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+  const [year, month, day] = parts;
+  return new Date(year, month - 1, day);
+}
 
 function compareEventosForSort(
   a: { dataInicio: string; nome: string },
   b: { dataInicio: string; nome: string },
-  sortBy: SortEventos
+  sortBy: SortEventos,
 ): number {
   switch (sortBy) {
     case "recentes": {
       const da = new Date(a.dataInicio).getTime();
       const db = new Date(b.dataInicio).getTime();
-      if (da !== db) return da - db;
+      if (da !== db) return db - da;
       return a.nome.localeCompare(b.nome, "pt-BR");
     }
     case "antigos": {
       const da = new Date(a.dataInicio).getTime();
       const db = new Date(b.dataInicio).getTime();
-      if (da !== db) return db - da;
+      if (da !== db) return da - db;
       return a.nome.localeCompare(b.nome, "pt-BR");
     }
-    case "nome": {
-      const byName = a.nome.localeCompare(b.nome, "pt-BR");
-      if (byName !== 0) return byName;
-      return new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime();
-    }
-    case "nome-desc": {
-      const byName = b.nome.localeCompare(a.nome, "pt-BR");
-      if (byName !== 0) return byName;
-      return new Date(a.dataInicio).getTime() - new Date(b.dataInicio).getTime();
-    }
+    case "nome":
+      return a.nome.localeCompare(b.nome, "pt-BR");
+    case "nome-desc":
+      return b.nome.localeCompare(a.nome, "pt-BR");
     default:
       return 0;
   }
@@ -80,10 +89,7 @@ function compareEventosForSort(
 export default function EventosPage() {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
-  const [storageTick, setStorageTick] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
-  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa">("lista");
   const [apenasOficiais, setApenasOficiais] = useState(false);
@@ -91,8 +97,6 @@ export default function EventosPage() {
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortEventos>("recentes");
-
-  useEffect(() => subscribeMeusEventosChanged(() => setStorageTick((t) => t + 1)), []);
 
   useEffect(() => {
     if (typeof window === "undefined" || !isAuthenticated) return;
@@ -103,29 +107,18 @@ export default function EventosPage() {
     }
   }, [isAuthenticated, router]);
 
-  const eventos = useMemo(() => {
-    void storageTick;
-    const pub = listEventosPublicadosUsuario();
-    const byId = new Map(mockEventos.map((e) => [e.id, e]));
-    for (const e of pub) {
-      if (!byId.has(e.id)) byId.set(e.id, e);
-    }
-    return [...byId.values()].map((ev) => ({
-      ...ev,
-      lugar:
-        ev.lugarId != null && ev.lugarId !== ""
-          ? mockLugares.find((l) => l.id === ev.lugarId) ??
-            resolveLugarById(ev.lugarId) ??
-            undefined
-          : undefined,
-    }));
-  }, [storageTick]);
+  const eventsQuery = useEvents({
+    q: searchQuery.trim() || undefined,
+    pageSize: 50,
+  });
+
+  const eventos = useMemo(
+    () => (eventsQuery.data?.items ?? []).map(mapEventToEvento),
+    [eventsQuery.data],
+  );
 
   const filteredEventos = useMemo(() => {
     return eventos.filter((evento) => {
-      const matchesSearch =
-        evento.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        evento.descricao.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesOficial = !apenasOficiais || evento.isOficial;
       const matchesClassificacao =
         classificacao === "todos" || evento.classificacao === classificacao;
@@ -133,21 +126,18 @@ export default function EventosPage() {
         areaAtuacao === "todos" ||
         evento.areasAtuacao.includes(areaAtuacao as AreaAtuacao);
 
-      return (
-        matchesSearch && matchesOficial && matchesClassificacao && matchesArea
-      );
+      return matchesOficial && matchesClassificacao && matchesArea;
     });
-  }, [eventos, searchQuery, apenasOficiais, classificacao, areaAtuacao]);
+  }, [eventos, apenasOficiais, classificacao, areaAtuacao]);
 
-  // Ordenar e agrupar por data (ordem dos blocos segue a ordenação escolhida)
   const eventosAgrupados = useMemo(() => {
     const sorted = [...filteredEventos].sort((a, b) =>
-      compareEventosForSort(a, b, sortBy)
+      compareEventosForSort(a, b, sortBy),
     );
     const grupos: Record<string, typeof filteredEventos> = {};
     const dateOrder: string[] = [];
     sorted.forEach((evento) => {
-      const data = evento.dataInicio;
+      const data = toDayKey(evento.dataInicio) || "sem-data";
       if (!grupos[data]) {
         grupos[data] = [];
         dateOrder.push(data);
@@ -167,7 +157,6 @@ export default function EventosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Breadcrumb */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -180,7 +169,6 @@ export default function EventosPage() {
         </div>
       </div>
 
-      {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
           <div className="flex items-center justify-between">
@@ -205,7 +193,6 @@ export default function EventosPage() {
             )}
           </div>
 
-          {/* View Toggle and Search */}
           <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">
@@ -235,7 +222,7 @@ export default function EventosPage() {
 
             <div className="flex gap-2">
               <div className="relative flex-1 lg:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Buscar eventos..."
                   value={searchQuery}
@@ -256,12 +243,9 @@ export default function EventosPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Main Content */}
           <div className="flex-1">
-            {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <Select
                 value={sortBy}
@@ -283,141 +267,142 @@ export default function EventosPage() {
               </span>
             </div>
 
-            {/* Events List */}
             {viewMode === "lista" ? (
-              <div className="space-y-8">
-                {eventosAgrupados.map(([data, eventosData]) => (
-                  <div key={data}>
-                    {/* Date Header */}
-                    <div className="mb-4 flex items-center gap-4">
-                      <div className="text-center">
-                        <p className="text-3xl font-bold text-foreground">
-                          {new Date(data).getDate()}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {new Date(data).toLocaleDateString("pt-BR", {
-                            month: "long",
-                          })}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(data).toLocaleDateString("pt-BR", {
-                            weekday: "long",
-                          })}
-                        </p>
-                      </div>
-                      <div className="h-px flex-1 bg-border" />
-                    </div>
-
-                    {/* Events for this date */}
-                    <div className="space-y-4 pl-0 md:pl-20">
-                      {eventosData.map((evento) => (
-                        <Card
-                          key={evento.id}
-                          className="overflow-hidden transition-shadow hover:shadow-md"
-                        >
-                          <CardContent className="p-0">
-                            <div className="flex flex-col md:flex-row">
-                              {/* Image */}
-                              <div className="relative h-48 w-full md:h-auto md:w-48">
-                                <Image
-                                  src={evento.imagem || "/placeholder.svg"}
-                                  alt={evento.nome}
-                                  fill
-                                  className="object-cover"
-                                />
-                              </div>
-
-                              {/* Content */}
-                              <div className="flex-1 p-5">
-                                <Link
-                                  href={`/eventos/${evento.id}`}
-                                  className="group"
-                                >
-                                  <h3 className="text-lg font-semibold text-primary group-hover:underline">
-                                    {evento.nome}
-                                  </h3>
-                                </Link>
-
-                                <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                                  <span className="flex items-center gap-1">
-                                    <CalendarDays className="h-4 w-4" />
-                                    {new Date(evento.dataInicio).toLocaleDateString(
-                                      "pt-BR"
-                                    )}{" "}
-                                    às {evento.horario}
-                                  </span>
-                                  {evento.lugar && (
-                                    <Link
-                                      href={`/lugares/${evento.lugar.id}`}
-                                      className="flex items-center gap-1 text-primary hover:underline"
-                                    >
-                                      <MapPin className="h-4 w-4" />
-                                      {evento.lugar.nome}
-                                    </Link>
-                                  )}
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                                  <span>
-                                    <strong>Classificação:</strong>{" "}
-                                    {
-                                      CLASSIFICACAO_LABELS[
-                                      evento.classificacao as ClassificacaoEtaria
-                                      ]
-                                    }
-                                  </span>
-                                  <span>
-                                    <strong>Entrada:</strong>{" "}
-                                    {evento.entrada === "gratuito"
-                                      ? "Gratuito"
-                                      : `R$ ${evento.preco?.toFixed(2)}`}
-                                  </span>
-                                </div>
-
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {evento.tags.slice(0, 3).map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
-                                    >
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-
-                                <div className="mt-4">
-                                  <Link href={`/eventos/${evento.id}`}>
-                                    <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
-                                      Acessar
-                                      <ChevronRight className="ml-1 h-4 w-4" />
-                                    </Button>
-                                  </Link>
-                                </div>
+              <QueryState
+                isLoading={eventsQuery.isLoading}
+                error={eventsQuery.error}
+                onRetry={() => eventsQuery.refetch()}
+                isEmpty={filteredEventos.length === 0}
+                emptyMessage="Nenhum evento encontrado"
+              >
+                <div className="space-y-8">
+                  {eventosAgrupados.map(([data, eventosData]) => {
+                    const parsedDay =
+                      data !== "sem-data" ? parseDayKey(data) : null;
+                    return (
+                      <div key={data}>
+                        {parsedDay && (
+                          <div className="mb-4 flex items-baseline gap-4 border-b border-border pb-3">
+                            <div className="flex items-baseline gap-3">
+                              <span className="text-4xl font-bold leading-none text-foreground">
+                                {parsedDay.getDate()}
+                              </span>
+                              <div className="flex flex-col leading-tight">
+                                <span className="text-sm font-medium capitalize text-foreground">
+                                  {parsedDay.toLocaleDateString("pt-BR", {
+                                    month: "long",
+                                  })}
+                                </span>
+                                <span className="text-xs capitalize text-muted-foreground">
+                                  {parsedDay.toLocaleDateString("pt-BR", {
+                                    weekday: "long",
+                                  })}
+                                </span>
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                          </div>
+                        )}
 
-                {filteredEventos.length === 0 && (
-                  <div className="py-12 text-center">
-                    <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-4 text-lg text-muted-foreground">
-                      Nenhum evento encontrado
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={clearFilters}
-                    >
-                      Limpar filtros
-                    </Button>
-                  </div>
-                )}
-              </div>
+                        <div className="space-y-4">
+                          {eventosData.map((evento) => (
+                            <Card
+                              key={evento.id}
+                              className="overflow-hidden transition-shadow hover:shadow-md"
+                            >
+                              <CardContent className="p-0">
+                                <div className="flex flex-col md:flex-row">
+                                  <div className="relative h-48 w-full shrink-0 bg-muted md:h-auto md:w-56">
+                                    {evento.imagem ? (
+                                      <Image
+                                        src={evento.imagem}
+                                        alt={evento.nome}
+                                        fill
+                                        sizes="(min-width: 768px) 224px, 100vw"
+                                        className="object-cover"
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center">
+                                        <ImageIcon className="h-10 w-10 text-muted-foreground/40" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 p-5">
+                                    <Link
+                                      href={`/eventos/${evento.id}`}
+                                      className="group"
+                                    >
+                                      <h3 className="text-lg font-semibold text-primary group-hover:underline">
+                                        {evento.nome}
+                                      </h3>
+                                    </Link>
+
+                                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                                      {evento.dataInicio && (
+                                        <span className="flex items-center gap-1">
+                                          <CalendarDays className="h-4 w-4" />
+                                          {new Date(evento.dataInicio).toLocaleDateString("pt-BR")}
+                                          {evento.horario ? ` às ${evento.horario}` : ""}
+                                        </span>
+                                      )}
+                                      {evento.lugar?.nome && (
+                                        <span className="flex items-center gap-1">
+                                          <MapPin className="h-4 w-4" />
+                                          {evento.lugar.nome}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="mt-3 flex flex-wrap gap-4 text-sm">
+                                      <span>
+                                        <strong>Classificação:</strong>{" "}
+                                        {
+                                          CLASSIFICACAO_LABELS[
+                                            evento.classificacao as ClassificacaoEtaria
+                                          ]
+                                        }
+                                      </span>
+                                      <span>
+                                        <strong>Entrada:</strong>{" "}
+                                        {evento.entrada === "gratuito"
+                                          ? "Gratuito"
+                                          : evento.preco
+                                          ? `R$ ${evento.preco.toFixed(2)}`
+                                          : "Pago"}
+                                      </span>
+                                    </div>
+
+                                    {evento.tags.length > 0 && (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {evento.tags.slice(0, 3).map((tag) => (
+                                          <span
+                                            key={tag}
+                                            className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+                                          >
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    <div className="mt-4">
+                                      <Link href={`/eventos/${evento.id}`}>
+                                        <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
+                                          Acessar
+                                          <ChevronRight className="ml-1 h-4 w-4" />
+                                        </Button>
+                                      </Link>
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </QueryState>
             ) : (
               <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
                 <MapIcon className="mx-auto h-16 w-16 text-muted-foreground/50" />
@@ -428,10 +413,8 @@ export default function EventosPage() {
             )}
           </div>
 
-          {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
-              }`}
+            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"}`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">
@@ -450,7 +433,6 @@ export default function EventosPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Status */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Status do evento</h4>
                     <div className="flex items-center space-x-2">
@@ -467,7 +449,6 @@ export default function EventosPage() {
                     </div>
                   </div>
 
-                  {/* Classificação */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">
                       Classificação Etária
@@ -486,13 +467,12 @@ export default function EventosPage() {
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Área de Atuação */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Linguagens</h4>
                     <Select value={areaAtuacao} onValueChange={setAreaAtuacao}>
@@ -506,13 +486,12 @@ export default function EventosPage() {
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Clear Filters */}
                   <Button
                     variant="link"
                     className="h-auto p-0 text-primary"
@@ -530,26 +509,7 @@ export default function EventosPage() {
       <CreateEventoDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCriadoRascunho={(id) => {
-          setLastCreatedId(id);
-          setDraftDialogOpen(true);
-        }}
-        onCriadoPublicado={(id) => router.push(`/eventos/${id}`)}
-      />
-
-      <DraftCreatedDialog
-        open={draftDialogOpen}
-        onOpenChange={setDraftDialogOpen}
-        titulo="Evento criado em rascunho"
-        nomeSecaoMeus="Meus eventos"
-        verItemLabel="Ver evento"
-        onVer={() => {
-          if (lastCreatedId) router.push(`/eventos/${lastCreatedId}`);
-        }}
-        onCompletarDepois={() => router.push("/eventos/meus")}
-        onCompletarInformacoes={() => {
-          if (lastCreatedId) router.push(`/eventos/${lastCreatedId}/editar`);
-        }}
+        onCriado={(id) => router.push(`/eventos/${id}`)}
       />
     </div>
   );

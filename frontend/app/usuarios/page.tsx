@@ -1,6 +1,19 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
+import {
+  ChevronRight,
+  Filter,
+  Grid3X3,
+  List,
+  Map as MapIcon,
+  Search,
+  Users,
+  X,
+} from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+import { QueryState } from "@/components/api/QueryState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,91 +24,46 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAgents } from "@/hooks/api/use-agents";
+import { mapAgentToUser } from "@/lib/api/types";
 import { sortListByMode, type ListSortBy } from "@/lib/list-sort";
-import { mockUsers } from "@/lib/mock-data";
 import {
   AREA_ATUACAO_LABELS,
   USER_ROLE_LABELS,
   type AreaAtuacao,
 } from "@/lib/types";
-import {
-  ChevronRight,
-  Filter,
-  Grid3X3,
-  List,
-  Map as MapIcon,
-  Plus,
-  Search,
-  Users,
-  X
-} from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { CreateAgenteDialog } from "@/components/recursos/create-agente-dialog";
-import { DraftCreatedDialog } from "@/components/recursos/draft-created-dialog";
-import {
-  listAgentesPublicadosUsuario,
-  subscribeMeusAgentesChanged,
-} from "@/lib/meus-agentes-storage";
 
 export default function UsuariosPage() {
-  const { isAuthenticated } = useAuth();
-  const router = useRouter();
-  const [storageTick, setStorageTick] = useState(0);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [draftDialogOpen, setDraftDialogOpen] = useState(false);
-  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "mapa" | "tabelas">(
-    "lista"
+    "lista",
   );
   const [tipoAtuacao, setTipoAtuacao] = useState<string>("todos");
   const [areaAtuacao, setAreaAtuacao] = useState<string>("todos");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<ListSortBy>("recentes");
 
-  useEffect(
-    () => subscribeMeusAgentesChanged(() => setStorageTick((t) => t + 1)),
-    []
-  );
+  const agentsQuery = useAgents({ q: searchQuery, pageSize: 50 });
 
-  useEffect(() => {
-    if (typeof window === "undefined" || !isAuthenticated) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("criar") === "1") {
-      setCreateOpen(true);
-      router.replace("/usuarios", { scroll: false });
-    }
-  }, [isAuthenticated, router]);
+  const usuarios = useMemo(() => {
+    const items = agentsQuery.data?.items ?? [];
+    return items.map(mapAgentToUser);
+  }, [agentsQuery.data]);
 
-  const filteredUsuarios = useMemo(() => {
-    void storageTick;
-    const pub = listAgentesPublicadosUsuario();
-    const byId = new Map(mockUsers.map((u) => [u.id, u]));
-    for (const u of pub) {
-      if (!byId.has(u.id)) byId.set(u.id, u);
-    }
-    const base = [...byId.values()];
-    return base.filter((usuario) => {
-      const matchesSearch =
-        usuario.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        usuario.biografia?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        usuario.cidade?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filtered = useMemo(() => {
+    return usuarios.filter((usuario) => {
       const matchesTipo =
         tipoAtuacao === "todos" || usuario.tipoAtuacao === tipoAtuacao;
       const matchesArea =
         areaAtuacao === "todos" ||
         usuario.areasAtuacao.includes(areaAtuacao as AreaAtuacao);
-
-      return matchesSearch && matchesTipo && matchesArea;
+      return matchesTipo && matchesArea;
     });
-  }, [searchQuery, tipoAtuacao, areaAtuacao, storageTick]);
+  }, [usuarios, tipoAtuacao, areaAtuacao]);
 
-  const sortedUsuarios = useMemo(
-    () => sortListByMode(filteredUsuarios, sortBy),
-    [filteredUsuarios, sortBy]
+  const sorted = useMemo(
+    () => sortListByMode(filtered, sortBy),
+    [filtered, sortBy],
   );
 
   const clearFilters = () => {
@@ -107,7 +75,6 @@ export default function UsuariosPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Breadcrumb */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
           <nav className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -120,7 +87,6 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
           <div className="flex items-center justify-between">
@@ -132,20 +98,8 @@ export default function UsuariosPage() {
                 Agentes
               </h1>
             </div>
-
-            {isAuthenticated && (
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Adicionar agente
-              </Button>
-            )}
           </div>
 
-          {/* View Toggle and Search */}
           <div className="mt-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted-foreground">
@@ -184,7 +138,7 @@ export default function UsuariosPage() {
 
             <div className="flex gap-2">
               <div className="relative flex-1 lg:w-80">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Buscar agentes..."
                   value={searchQuery}
@@ -205,12 +159,9 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Content */}
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Main Content */}
           <div className="flex-1">
-            {/* Sort and Count */}
             <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
               <Select
                 value={sortBy}
@@ -228,153 +179,139 @@ export default function UsuariosPage() {
               </Select>
 
               <span className="rounded-lg bg-muted px-4 py-2 text-sm font-medium">
-                {filteredUsuarios.length} Agentes encontrados
+                {filtered.length} Agentes encontrados
               </span>
             </div>
 
-            {/* Users List */}
-            {viewMode === "lista" ? (
-              <div className="space-y-4">
-                {sortedUsuarios.map((usuario) => (
-                  <Card
-                    key={usuario.id}
-                    className="overflow-hidden transition-shadow hover:shadow-md"
-                  >
-                    <CardContent className="p-0">
-                      <div className="flex flex-col md:flex-row">
-                        {/* Avatar */}
-                        <div className="flex items-center justify-center bg-muted p-6 md:w-48">
-                          <div className="relative h-24 w-24 overflow-hidden rounded-full">
-                            <Image
-                              src={usuario.avatar || "/placeholder.svg"}
-                              alt={usuario.nome}
-                              fill
-                              className="object-cover"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 p-5">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <Link
-                                href={`/usuarios/${usuario.id}`}
-                                className="group"
-                              >
-                                <h3 className="text-lg font-semibold text-primary group-hover:underline">
-                                  {usuario.nome}
-                                </h3>
-                              </Link>
-                              <p className="text-sm text-secondary">
-                                Este agente atua de forma{" "}
-                                <span className="font-medium">
-                                  {usuario.tipoAtuacao === "coletivo"
-                                    ? "Coletivo"
-                                    : "Individual"}
-                                </span>
-                              </p>
-                            </div>
-                          </div>
-
-                          {usuario.biografia && (
-                            <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">
-                              {usuario.biografia}
-                            </p>
-                          )}
-
-                          {usuario.areasAtuacao.length > 0 && (
-                            <div className="mt-3">
-                              <span className="text-sm font-medium">
-                                Áreas de Atuação ({usuario.areasAtuacao.length}):
-                              </span>
-                              <div className="mt-1 flex flex-wrap gap-2">
-                                {usuario.areasAtuacao.map((area) => (
-                                  <span
-                                    key={area}
-                                    className="rounded-full bg-accent/10 px-2 py-1 text-xs font-medium text-accent"
-                                  >
-                                    {AREA_ATUACAO_LABELS[area as AreaAtuacao]}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {usuario.roles.length > 0 && (
-                            <div className="mt-3">
-                              <span className="text-sm font-medium">
-                                Atribuições:
-                              </span>
-                              <div className="mt-1 flex flex-wrap gap-2">
-                                {usuario.roles.map((role) => (
-                                  <span
-                                    key={role}
-                                    className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground"
-                                  >
-                                    {USER_ROLE_LABELS[role]}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="mt-4">
-                            <Link href={`/usuarios/${usuario.id}`}>
-                              <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
-                                Acessar
-                                <ChevronRight className="ml-1 h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {filteredUsuarios.length === 0 && (
-                  <div className="py-12 text-center">
-                    <Users className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                    <p className="mt-4 text-lg text-muted-foreground">
-                      Nenhum agente encontrado
-                    </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={clearFilters}
+            <QueryState
+              isLoading={agentsQuery.isLoading}
+              error={agentsQuery.error}
+              onRetry={() => agentsQuery.refetch()}
+              isEmpty={viewMode === "lista" && sorted.length === 0}
+              emptyMessage="Nenhum agente encontrado."
+            >
+              {viewMode === "lista" ? (
+                <div className="space-y-4">
+                  {sorted.map((usuario) => (
+                    <Card
+                      key={usuario.id}
+                      className="overflow-hidden transition-shadow hover:shadow-md"
                     >
-                      Limpar filtros
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
-                {viewMode === "mapa" ? (
-                  <>
-                    <MapIcon className="mx-auto h-16 w-16 text-muted-foreground/50" />
-                    <p className="mt-4 text-muted-foreground">
-                      Visualização em mapa será implementada com integração de
-                      mapas
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Grid3X3 className="mx-auto h-16 w-16 text-muted-foreground/50" />
-                    <p className="mt-4 text-muted-foreground">
-                      Visualização em tabela em desenvolvimento
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
+                      <CardContent className="p-0">
+                        <div className="flex flex-col md:flex-row">
+                          <div className="flex items-center justify-center bg-muted p-6 md:w-48">
+                            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted-foreground/10">
+                              <Users className="h-12 w-12 text-muted-foreground" />
+                            </div>
+                          </div>
+
+                          <div className="flex-1 p-5">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <Link
+                                  href={`/usuarios/${usuario.id}`}
+                                  className="group"
+                                >
+                                  <h3 className="text-lg font-semibold text-primary group-hover:underline">
+                                    {usuario.nome}
+                                  </h3>
+                                </Link>
+                                <p className="text-sm text-secondary">
+                                  Este agente atua de forma{" "}
+                                  <span className="font-medium">
+                                    {usuario.tipoAtuacao === "coletivo"
+                                      ? "Coletivo"
+                                      : "Individual"}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
+
+                            {usuario.biografia && (
+                              <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">
+                                {usuario.biografia}
+                              </p>
+                            )}
+
+                            {usuario.areasAtuacao.length > 0 && (
+                              <div className="mt-3">
+                                <span className="text-sm font-medium">
+                                  Áreas de Atuação (
+                                  {usuario.areasAtuacao.length}
+                                  ):
+                                </span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {usuario.areasAtuacao.map((area) => (
+                                    <span
+                                      key={area}
+                                      className="rounded-full bg-accent/10 px-2 py-1 text-xs font-medium text-accent"
+                                    >
+                                      {AREA_ATUACAO_LABELS[area]}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {usuario.roles.length > 0 && (
+                              <div className="mt-3">
+                                <span className="text-sm font-medium">
+                                  Atribuições:
+                                </span>
+                                <div className="mt-1 flex flex-wrap gap-2">
+                                  {usuario.roles.map((role) => (
+                                    <span
+                                      key={role}
+                                      className="rounded-full bg-muted px-2 py-1 text-xs font-medium text-foreground"
+                                    >
+                                      {USER_ROLE_LABELS[role]}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="mt-4">
+                              <Link href={`/usuarios/${usuario.id}`}>
+                                <Button className="w-full bg-primary hover:bg-primary/90 md:w-auto">
+                                  Acessar
+                                  <ChevronRight className="ml-1 h-4 w-4" />
+                                </Button>
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-muted/30 p-8 text-center">
+                  {viewMode === "mapa" ? (
+                    <>
+                      <MapIcon className="mx-auto h-16 w-16 text-muted-foreground/50" />
+                      <p className="mt-4 text-muted-foreground">
+                        Visualização em mapa será implementada com integração de
+                        mapas
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Grid3X3 className="mx-auto h-16 w-16 text-muted-foreground/50" />
+                      <p className="mt-4 text-muted-foreground">
+                        Visualização em tabela em desenvolvimento
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
+            </QueryState>
           </div>
 
-          {/* Filters Sidebar */}
           <aside
-            className={`w-full lg:w-72 ${showFilters ? "block" : "hidden lg:block"
-              }`}
+            className={`w-full lg:w-72 ${
+              showFilters ? "block" : "hidden lg:block"
+            }`}
           >
             <Card className="sticky top-24">
               <CardContent className="p-6">
@@ -393,7 +330,6 @@ export default function UsuariosPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Tipo de Atuação */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Tipo</h4>
                     <Select value={tipoAtuacao} onValueChange={setTipoAtuacao}>
@@ -408,7 +344,6 @@ export default function UsuariosPage() {
                     </Select>
                   </div>
 
-                  {/* Área de Atuação */}
                   <div>
                     <h4 className="mb-3 text-sm font-medium">Área de atuação</h4>
                     <Select value={areaAtuacao} onValueChange={setAreaAtuacao}>
@@ -422,13 +357,12 @@ export default function UsuariosPage() {
                             <SelectItem key={value} value={value}>
                               {label}
                             </SelectItem>
-                          )
+                          ),
                         )}
                       </SelectContent>
                     </Select>
                   </div>
 
-                  {/* Clear Filters */}
                   <Button
                     variant="link"
                     className="h-auto p-0 text-primary"
@@ -442,31 +376,6 @@ export default function UsuariosPage() {
           </aside>
         </div>
       </div>
-
-      <CreateAgenteDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCriadoRascunho={(id) => {
-          setLastCreatedId(id);
-          setDraftDialogOpen(true);
-        }}
-        onCriadoPublicado={(id) => router.push(`/usuarios/${id}`)}
-      />
-
-      <DraftCreatedDialog
-        open={draftDialogOpen}
-        onOpenChange={setDraftDialogOpen}
-        titulo="Agente criado em rascunho"
-        nomeSecaoMeus="Meus agentes"
-        verItemLabel="Ver perfil"
-        onVer={() => {
-          if (lastCreatedId) router.push(`/usuarios/${lastCreatedId}`);
-        }}
-        onCompletarDepois={() => router.push("/usuarios/meus")}
-        onCompletarInformacoes={() => {
-          if (lastCreatedId) router.push(`/usuarios/${lastCreatedId}/editar`);
-        }}
-      />
     </div>
   );
 }

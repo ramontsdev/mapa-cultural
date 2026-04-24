@@ -8,6 +8,7 @@ import { authRoutes } from './routes/authRoutes';
 import { eventRoutes } from './routes/eventRoutes';
 import { opportunityRoutes } from './routes/opportunityRoutes';
 import { projectRoutes } from './routes/projectRoutes';
+import { registrationRoutes } from './routes/registrationRoutes';
 import { spaceRoutes } from './routes/spaceRoutes';
 import { userRoutes } from './routes/userRoutes';
 
@@ -27,7 +28,16 @@ app.use((error: Error, _request: Request, response: Response, _next: NextFunctio
   response.status(500).json({ error: 'Internal Server Error' });
 });
 
-app.use('/api', [authRoutes, userRoutes, agentRoutes, spaceRoutes, projectRoutes, eventRoutes, opportunityRoutes]);
+app.use('/api', [
+  authRoutes,
+  userRoutes,
+  agentRoutes,
+  spaceRoutes,
+  projectRoutes,
+  eventRoutes,
+  opportunityRoutes,
+  registrationRoutes,
+]);
 
 app.listen(env.port, () => {
   console.info(`Server is running on port ${env.port}`);
