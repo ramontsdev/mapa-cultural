@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import { useMyAgent } from "@/hooks/api/use-agents";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -59,7 +60,13 @@ function AccountMenuSection({
   );
 }
 
-function AccountDropdownBody({ logout }: { logout: () => void }) {
+function AccountDropdownBody({
+  logout,
+  meuPerfilHref,
+}: {
+  logout: () => void;
+  meuPerfilHref: string;
+}) {
   return (
     <div className="flex max-h-[min(85vh,520px)] flex-col sm:max-h-[85vh] sm:flex-row">
       <div className="max-h-[55vh] flex-1 overflow-y-auto border-b border-border p-4 sm:max-h-none sm:border-r sm:border-b-0">
@@ -159,7 +166,7 @@ function AccountDropdownBody({ logout }: { logout: () => void }) {
         <DropdownMenuSeparator className="my-3" />
         <DropdownMenuItem asChild className="cursor-pointer px-2 py-2.5">
           <Link
-            href="/perfil"
+            href={meuPerfilHref}
             className="flex w-full items-center gap-3 font-medium"
           >
             <Users className="h-4 w-4 text-primary" />
@@ -184,6 +191,11 @@ function AccountDropdownBody({ logout }: { logout: () => void }) {
 export function Header() {
   const pathname = usePathname();
   const { isAuthenticated, logout } = useAuth();
+  const myAgentQuery = useMyAgent({ enabled: isAuthenticated });
+  const meuPerfilHref =
+    myAgentQuery.data?.id != null
+      ? `/usuarios/${myAgentQuery.data.id}`
+      : "/usuarios/meus";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
@@ -247,7 +259,10 @@ export function Header() {
                 align="end"
                 className="w-[min(calc(100vw-1rem),36rem)] overflow-hidden p-0 shadow-lg"
               >
-                <AccountDropdownBody logout={logout} />
+                <AccountDropdownBody
+                  logout={logout}
+                  meuPerfilHref={meuPerfilHref}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
@@ -361,7 +376,7 @@ export function Header() {
                   </Link>
                 </div>
                 <Link
-                  href="/perfil"
+                  href={meuPerfilHref}
                   onClick={() => setMobileMenuOpen(false)}
                   className="flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium text-primary hover:bg-muted"
                 >

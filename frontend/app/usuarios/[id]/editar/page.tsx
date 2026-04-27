@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
 import { EntityMediaManager } from "@/components/media/entity-media-manager";
+import { AgentCoverAvatarEditor } from "@/components/profile/agent-cover-avatar-editor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -98,6 +99,7 @@ export default function EditarMeuAgentePage() {
         {user && myAgentQuery.data ? (
           <>
             <EditForm
+              agentId={myAgentQuery.data.id}
               initialUser={user}
               onSubmit={async (values) => {
                 const shortDescription = formatMetadata(values.oQueFaz?.trim() ?? "", {
@@ -147,13 +149,20 @@ export default function EditarMeuAgentePage() {
 }
 
 type EditFormProps = {
+  agentId: string;
   initialUser: ReturnType<typeof mapAgentToUser>;
   onSubmit: (values: MeuAgenteEdicaoFormData) => Promise<void> | void;
   isSaving: boolean;
   cancelHref: string;
 };
 
-function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps) {
+function EditForm({
+  agentId,
+  initialUser,
+  onSubmit,
+  isSaving,
+  cancelHref,
+}: EditFormProps) {
   const form = useForm<MeuAgenteEdicaoFormData>({
     resolver: zodResolver(meuAgenteEdicaoSchema),
     defaultValues: {
@@ -212,6 +221,17 @@ function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps
         <CardContent>
           <Form {...form}>
             <form className="space-y-5" onSubmit={handleSubmit}>
+              <AgentCoverAvatarEditor
+                agentId={agentId}
+                avatarUrl={form.watch("avatarUrl") ?? ""}
+                coverUrl={form.watch("coverUrl") ?? ""}
+                onAvatarApplied={(url) =>
+                  form.setValue("avatarUrl", url, { shouldDirty: true })
+                }
+                onCoverApplied={(url) =>
+                  form.setValue("coverUrl", url, { shouldDirty: true })
+                }
+              />
               <FormField
                 control={form.control}
                 name="nome"
@@ -308,10 +328,16 @@ function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps
                 name="avatarUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>URL da foto de perfil (opcional)</FormLabel>
+                    <FormLabel>
+                      URL da foto de perfil (opcional, avançado)
+                    </FormLabel>
                     <FormControl>
                       <Input type="url" placeholder="https://" {...field} />
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Use apenas se quiser apontar para uma imagem externa em vez
+                      do upload acima.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -321,10 +347,16 @@ function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps
                 name="coverUrl"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>URL da imagem de capa (opcional)</FormLabel>
+                    <FormLabel>
+                      URL da imagem de capa (opcional, avançado)
+                    </FormLabel>
                     <FormControl>
                       <Input type="url" placeholder="https://" {...field} />
                     </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Use apenas se quiser apontar para uma imagem externa em vez
+                      do upload acima.
+                    </p>
                     <FormMessage />
                   </FormItem>
                 )}
