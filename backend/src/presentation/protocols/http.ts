@@ -1,6 +1,15 @@
+import type { Buffer } from 'node:buffer';
+
 export type HttpResponse = {
   statusCode: number;
   body?: any;
+};
+
+export type HttpUploadedFile = {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
 };
 
 export type HttpRequest = {
@@ -11,4 +20,5 @@ export type HttpRequest = {
   account?: {
     userId: string;
   };
+  file?: HttpUploadedFile;
 };

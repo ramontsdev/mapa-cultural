@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, Loader2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityMediaManager } from "@/components/media/entity-media-manager";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,13 +21,122 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useMyAgent } from "@/hooks/api/use-agents";
 import {
   useDeleteOpportunity,
   useOpportunity,
+  useUpdateOpportunity,
 } from "@/hooks/api/use-opportunities";
 import { ApiError } from "@/lib/api/http";
-import { mapOpportunityToOportunidade } from "@/lib/api/types";
+import {
+  formatMetadata,
+  mapOpportunityToOportunidade,
+  parseShortDescription,
+  type OpportunityDTO,
+} from "@/lib/api/types";
+
+function OportunidadeEditForm({
+  id,
+  dto,
+}: {
+  id: string;
+  dto: OpportunityDTO;
+}) {
+  const updateMutation = useUpdateOpportunity(id);
+  const o = mapOpportunityToOportunidade(dto);
+  const { meta } = parseShortDescription(dto.shortDescription);
+
+  const [nome, setNome] = useState(dto.name);
+  const [descricao, setDescricao] = useState(o.descricao);
+  const [avatarUrl, setAvatarUrl] = useState(dto.avatarUrl ?? "");
+  const [coverUrl, setCoverUrl] = useState(dto.coverUrl ?? "");
+
+  const salvar = async () => {
+    const emptyToNull = (s: string) => {
+      const t = s.trim();
+      return t === "" ? null : t;
+    };
+    try {
+      const shortDescription = formatMetadata(descricao.trim(), meta);
+      await updateMutation.mutateAsync({
+        name: nome.trim(),
+        shortDescription,
+        avatarUrl: emptyToNull(avatarUrl),
+        coverUrl: emptyToNull(coverUrl),
+      });
+      toast.success("Oportunidade atualizada.");
+    } catch (error) {
+      toast.error(
+        error instanceof ApiError ? error.message : "Não foi possível salvar.",
+      );
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Gerenciar oportunidade</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="opp-nome">Nome</Label>
+          <Input
+            id="opp-nome"
+            value={nome}
+            onChange={(e) => setNome(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="opp-desc">Descrição</Label>
+          <Textarea
+            id="opp-desc"
+            className="min-h-[120px]"
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="opp-avatar">URL da foto de perfil (opcional)</Label>
+          <Input
+            id="opp-avatar"
+            type="url"
+            placeholder="https://"
+            value={avatarUrl}
+            onChange={(e) => setAvatarUrl(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="opp-cover">URL da imagem de capa (opcional)</Label>
+          <Input
+            id="opp-cover"
+            type="url"
+            placeholder="https://"
+            value={coverUrl}
+            onChange={(e) => setCoverUrl(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+          <Button
+            type="button"
+            onClick={() => void salvar()}
+            disabled={updateMutation.isPending}
+          >
+            {updateMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : null}
+            Salvar
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/oportunidades/${id}`}>Voltar</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function EditarMeuOportunidadePage() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -107,42 +217,23 @@ export default function EditarMeuOportunidadePage() {
           </div>
         )}
         {opportunityQuery.data && oportunidade && canEdit && (
-          <div className="mx-auto max-w-3xl px-4 py-8 md:px-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gerenciar oportunidade</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Nome</p>
-                  <p className="font-medium">{oportunidade.nome}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Descrição</p>
-                  <p className="whitespace-pre-wrap">
-                    {oportunidade.descricao || "—"}
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  A edição detalhada de oportunidades ainda não está disponível.
-                  Você pode excluir e recriar caso precise alterar dados.
-                </p>
-                <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                  <Button variant="outline" asChild>
-                    <Link href={`/oportunidades/${id}`}>Voltar</Link>
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    className="ml-auto"
-                    onClick={() => setDeleteOpen(true)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Excluir
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 md:px-6">
+            <OportunidadeEditForm id={id} dto={opportunityQuery.data} />
+            <div className="flex justify-end">
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir oportunidade
+              </Button>
+            </div>
+            <EntityMediaManager
+              ownerType="OPPORTUNITY"
+              ownerId={id}
+              media={opportunityQuery.data.mediaAssets}
+            />
           </div>
         )}
       </QueryState>

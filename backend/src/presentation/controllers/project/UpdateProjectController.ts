@@ -37,6 +37,8 @@ export class UpdateProjectController implements IController {
         name: data.name,
         shortDescription: data.shortDescription,
         longDescription: data.longDescription,
+        avatarUrl: data.avatarUrl,
+        coverUrl: data.coverUrl,
         updateTimestamp: new Date(),
       },
     });

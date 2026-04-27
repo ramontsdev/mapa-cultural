@@ -39,6 +39,8 @@ export type CreateEventPayload = {
   longDescription?: string;
   rules?: string;
   projectId?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export function createEvent(payload: CreateEventPayload): Promise<EventDTO> {

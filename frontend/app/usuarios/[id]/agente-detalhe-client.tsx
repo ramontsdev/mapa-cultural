@@ -20,6 +20,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EntityProfileHero } from "@/components/entity/entity-profile-hero";
+import { EntityMediaSections } from "@/components/media/entity-media-sections";
 import { useAgent, useMyAgent } from "@/hooks/api/use-agents";
 import { mapAgentToUser } from "@/lib/api/types";
 import { AREA_ATUACAO_LABELS } from "@/lib/types";
@@ -64,42 +66,44 @@ export function AgenteDetalhePageClient() {
             </div>
           </div>
 
-          <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Users className="h-14 w-14 text-muted-foreground" />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                    {usuario.nome}
-                  </h1>
-                  <p className="text-muted-foreground">
-                    Atuação{" "}
-                    {usuario.tipoAtuacao === "coletivo"
-                      ? "coletiva"
-                      : "individual"}
+          <EntityProfileHero
+            coverUrl={usuario.coverUrl}
+            avatarUrl={usuario.avatar}
+            avatarFallback={<Users className="h-14 w-14" />}
+            titleSlot={
+              <>
+                <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                  {usuario.nome}
+                </h1>
+                <p className="text-muted-foreground">
+                  Atuação{" "}
+                  {usuario.tipoAtuacao === "coletivo"
+                    ? "coletiva"
+                    : "individual"}
+                </p>
+                {(usuario.cidade || usuario.estado) && (
+                  <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4" />
+                    {[usuario.cidade, usuario.estado]
+                      .filter(Boolean)
+                      .join(" — ")}
                   </p>
-                  {(usuario.cidade || usuario.estado) && (
-                    <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      {[usuario.cidade, usuario.estado]
-                        .filter(Boolean)
-                        .join(" — ")}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {possoEditar && (
+                )}
+              </>
+            }
+            actionsSlot={
+              possoEditar ? (
                 <Button variant="secondary" className="gap-2" asChild>
                   <Link href={`/usuarios/${id}/editar`}>
                     <Pencil className="h-4 w-4" />
                     Editar perfil
                   </Link>
                 </Button>
-              )}
-            </div>
+              ) : undefined
+            }
+          />
 
+          <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
             <div className="grid gap-6 lg:grid-cols-3">
               <div className="space-y-6 lg:col-span-2">
                 {usuario.biografia && (
@@ -148,6 +152,8 @@ export function AgenteDetalhePageClient() {
                     </CardContent>
                   </Card>
                 )}
+
+                <EntityMediaSections media={agentQuery.data?.mediaAssets} />
               </div>
 
               <div className="space-y-6">

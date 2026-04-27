@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityMediaManager } from "@/components/media/entity-media-manager";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,6 +78,7 @@ function dtoToFormValues(dto: EventDTO): MeuEventoEdicaoFormData {
     lugarId: "",
     tags: evento.tags.length ? evento.tags.join(", ") : "",
     imagem: evento.imagem ?? "",
+    avatarUrl: dto.avatarUrl ?? "",
   };
 }
 
@@ -133,9 +135,16 @@ function EditarEventoForm({ dto, id }: { dto: EventDTO; id: string }) {
           imagem: data.imagem?.trim() || undefined,
         });
 
+        const emptyToNull = (s: string | undefined) => {
+          const t = s?.trim();
+          return t === "" || t === undefined ? null : t;
+        };
+
         await updateMutation.mutateAsync({
           name: data.nome,
           shortDescription,
+          avatarUrl: emptyToNull(data.avatarUrl),
+          coverUrl: emptyToNull(data.imagem),
         });
 
         toast.success("Evento atualizado.");
@@ -378,9 +387,27 @@ function EditarEventoForm({ dto, id }: { dto: EventDTO; id: string }) {
                   name="imagem"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>URL da imagem (opcional)</FormLabel>
+                      <FormLabel>URL da imagem de capa (opcional)</FormLabel>
                       <FormControl>
                         <Input
+                          placeholder="https://…"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="avatarUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>URL da foto de perfil (opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
                           placeholder="https://…"
                           {...field}
                           value={field.value ?? ""}
@@ -420,6 +447,13 @@ function EditarEventoForm({ dto, id }: { dto: EventDTO; id: string }) {
             </div>
           </CardContent>
         </Card>
+        <div className="mt-8">
+          <EntityMediaManager
+            ownerType="EVENT"
+            ownerId={id}
+            media={dto.mediaAssets}
+          />
+        </div>
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

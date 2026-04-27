@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { MiniMapWrapper } from "@/app/lugares/[id]/mini-map-wrapper";
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityMediaManager } from "@/components/media/entity-media-manager";
 import { StaticMapPlaceholder } from "@/components/mini-map";
 import {
   AlertDialog,
@@ -97,6 +98,8 @@ function spaceToFormValues(space: SpaceDTO): EspacoEdicaoFormData {
     facebook: lugar.redesSociais?.facebook ?? "",
     twitter: lugar.redesSociais?.twitter ?? "",
     youtube: lugar.redesSociais?.youtube ?? "",
+    avatarUrl: space.avatarUrl ?? "",
+    coverUrl: space.coverUrl ?? "",
   };
 }
 
@@ -130,9 +133,17 @@ function formToPayload(data: EspacoEdicaoFormData) {
     youtube: data.youtube,
   });
 
+  const emptyToNull = (s: string | undefined) => {
+    const t = s?.trim();
+    return t === "" || t === undefined ? null : t;
+  };
+
   return {
     name: data.nome,
     shortDescription,
+    longDescription: data.descricao.trim(),
+    avatarUrl: emptyToNull(data.avatarUrl),
+    coverUrl: emptyToNull(data.coverUrl),
   };
 }
 
@@ -257,6 +268,40 @@ function EditarEspacoForm({ space }: { space: SpaceDTO }) {
                         <FormLabel>Nome do espaço</FormLabel>
                         <FormControl>
                           <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="avatarUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>URL da foto de perfil (opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="url"
+                            placeholder="https://"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="coverUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>URL da imagem de capa (opcional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="url"
+                            placeholder="https://"
+                            {...field}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -618,6 +663,12 @@ function EditarEspacoForm({ space }: { space: SpaceDTO }) {
                   />
                 </CardContent>
               </Card>
+
+              <EntityMediaManager
+                ownerType="SPACE"
+                ownerId={space.id}
+                media={space.mediaAssets}
+              />
             </div>
 
             <div className="space-y-6">

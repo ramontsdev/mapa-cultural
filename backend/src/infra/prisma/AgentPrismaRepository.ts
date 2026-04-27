@@ -20,6 +20,8 @@ export class AgentPrismaRepository implements
       geoLocation: agent.geoLocation,
       shortDescription: agent.shortDescription ?? null,
       longDescription: agent.longDescription ?? null,
+      avatarUrl: agent.avatarUrl ?? null,
+      coverUrl: agent.coverUrl ?? null,
       createTimestamp: agent.createTimestamp,
       updateTimestamp: agent.updateTimestamp ?? null,
       status: agent.status,
@@ -42,6 +44,8 @@ export class AgentPrismaRepository implements
         publicLocation: data.publicLocation,
         shortDescription: data.shortDescription,
         longDescription: data.longDescription,
+        avatarUrl: data.avatarUrl,
+        coverUrl: data.coverUrl,
         updateTimestamp: new Date(),
       },
     });

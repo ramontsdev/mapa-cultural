@@ -33,6 +33,8 @@ export type UpdateMyAgentPayload = {
   publicLocation?: boolean;
   shortDescription?: string;
   longDescription?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export function updateMyAgent(

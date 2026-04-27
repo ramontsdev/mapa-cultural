@@ -38,6 +38,8 @@ export type CreateSpacePayload = {
   isPublic?: boolean;
   shortDescription?: string;
   longDescription?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export function createSpace(payload: CreateSpacePayload): Promise<SpaceDTO> {

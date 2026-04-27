@@ -51,6 +51,8 @@ export interface User {
   nome: string;
   email: string;
   avatar?: string;
+  /** URL da imagem de capa (banner) do perfil. */
+  coverUrl?: string;
   roles: UserRole[];
   areasAtuacao: AreaAtuacao[];
   biografia?: string;
@@ -115,6 +117,8 @@ export interface Lugar {
   acessibilidade: boolean;
   areasAtuacao: AreaAtuacao[];
   imagem?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
   telefone?: string;
   email?: string;
   website?: string;
@@ -178,6 +182,8 @@ export interface Evento {
   areasAtuacao: AreaAtuacao[];
   tags: string[];
   imagem?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
   createdById: string;
   createdAt: string;
   isOficial: boolean;
@@ -217,6 +223,8 @@ export interface Oportunidade {
   valorPremio?: number;
   link?: string;
   isOficial: boolean;
+  avatarUrl?: string;
+  coverUrl?: string;
   createdById: string;
   createdAt: string;
 }
@@ -253,6 +261,8 @@ export interface Projeto {
   parceiros?: string[];
   isOficial: boolean;
   imagem?: string;
+  avatarUrl?: string;
+  coverUrl?: string;
   createdById: string;
   createdAt: string;
 }

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityMediaManager } from "@/components/media/entity-media-manager";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -95,35 +96,50 @@ export default function EditarMeuAgentePage() {
         isEmpty={!user}
       >
         {user && myAgentQuery.data ? (
-          <EditForm
-            initialUser={user}
-            onSubmit={async (values) => {
-              const shortDescription = formatMetadata(values.oQueFaz?.trim() ?? "", {
-                tipoAtuacao: values.tipoAtuacao,
-                email: values.email?.trim(),
-                cidade: values.cidade?.trim(),
-                estado: values.estado?.trim().slice(0, 2).toUpperCase(),
-                areas: values.areasAtuacao.join(","),
-              });
-              try {
-                await updateMutation.mutateAsync({
-                  name: values.nome,
-                  shortDescription,
-                  longDescription: values.biografia,
+          <>
+            <EditForm
+              initialUser={user}
+              onSubmit={async (values) => {
+                const shortDescription = formatMetadata(values.oQueFaz?.trim() ?? "", {
+                  tipoAtuacao: values.tipoAtuacao,
+                  email: values.email?.trim(),
+                  cidade: values.cidade?.trim(),
+                  estado: values.estado?.trim().slice(0, 2).toUpperCase(),
+                  areas: values.areasAtuacao.join(","),
                 });
-                toast.success("Perfil atualizado com sucesso!");
-                router.push(`/usuarios/${id}`);
-              } catch (error) {
-                if (error instanceof ApiError) {
-                  toast.error(error.message);
-                } else {
-                  toast.error("Não foi possível atualizar o perfil.");
+                try {
+                  const emptyToNull = (s: string | undefined) => {
+                    const t = s?.trim();
+                    return t === "" || t === undefined ? null : t;
+                  };
+                  await updateMutation.mutateAsync({
+                    name: values.nome,
+                    shortDescription,
+                    longDescription: values.biografia,
+                    avatarUrl: emptyToNull(values.avatarUrl),
+                    coverUrl: emptyToNull(values.coverUrl),
+                  });
+                  toast.success("Perfil atualizado com sucesso!");
+                  router.push(`/usuarios/${id}`);
+                } catch (error) {
+                  if (error instanceof ApiError) {
+                    toast.error(error.message);
+                  } else {
+                    toast.error("Não foi possível atualizar o perfil.");
+                  }
                 }
-              }
-            }}
-            isSaving={updateMutation.isPending}
-            cancelHref={`/usuarios/${id}`}
-          />
+              }}
+              isSaving={updateMutation.isPending}
+              cancelHref={`/usuarios/${id}`}
+            />
+            <div className="mx-auto max-w-3xl px-4 pb-10 md:px-6">
+              <EntityMediaManager
+                ownerType="AGENT"
+                ownerId={myAgentQuery.data.id}
+                media={myAgentQuery.data.mediaAssets}
+              />
+            </div>
+          </>
         ) : null}
       </QueryState>
     </div>
@@ -149,6 +165,8 @@ function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps
       cidade: initialUser.cidade ?? "",
       estado: initialUser.estado ?? "",
       oQueFaz: initialUser.oQueFaz ?? "",
+      avatarUrl: initialUser.avatar ?? "",
+      coverUrl: initialUser.coverUrl ?? "",
     },
   });
 
@@ -280,6 +298,32 @@ function EditForm({ initialUser, onSubmit, isSaving, cancelHref }: EditFormProps
                     <FormLabel>O que faz (opcional)</FormLabel>
                     <FormControl>
                       <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="avatarUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>URL da foto de perfil (opcional)</FormLabel>
+                    <FormControl>
+                      <Input type="url" placeholder="https://" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coverUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>URL da imagem de capa (opcional)</FormLabel>
+                    <FormControl>
+                      <Input type="url" placeholder="https://" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

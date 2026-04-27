@@ -40,6 +40,15 @@ export type CreateOpportunityPayload = {
   registrationTo: string;
   objectType: "Event" | "Project";
   objectId: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
+};
+
+export type UpdateOpportunityPayload = {
+  name?: string;
+  shortDescription?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export function createOpportunity(
@@ -54,5 +63,15 @@ export function createOpportunity(
 export function deleteOpportunity(id: string): Promise<void> {
   return apiFetch<void>(`/opportunities/${id}`, {
     method: "DELETE",
+  });
+}
+
+export function updateOpportunity(
+  id: string,
+  payload: UpdateOpportunityPayload,
+): Promise<OpportunityDTO> {
+  return apiFetch<OpportunityDTO>(`/opportunities/${id}`, {
+    method: "PATCH",
+    body: payload,
   });
 }

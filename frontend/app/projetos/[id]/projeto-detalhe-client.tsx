@@ -17,6 +17,8 @@ import { useMemo } from "react";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityProfileHero } from "@/components/entity/entity-profile-hero";
+import { EntityMediaSections } from "@/components/media/entity-media-sections";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,41 +104,38 @@ export function ProjetoDetalhePageClient() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-4 md:px-6">
-        {possoEditar && (
-          <div className="mb-4 flex justify-end">
+      <EntityProfileHero
+        coverUrl={projeto.coverUrl}
+        avatarUrl={projeto.avatarUrl}
+        avatarFallback={<FolderKanban className="h-14 w-14" />}
+        titleSlot={
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                {projeto.nome}
+              </h1>
+              {projeto.isOficial && (
+                <BadgeCheck className="h-6 w-6 text-primary" />
+              )}
+            </div>
+            <p className="text-muted-foreground">
+              {TIPO_PROJETO_LABELS[projeto.tipo as TipoProjeto]}
+            </p>
+          </>
+        }
+        actionsSlot={
+          possoEditar ? (
             <Button variant="secondary" className="gap-2" asChild>
               <Link href={`/projetos/${id}/editar`}>
                 <Pencil className="h-4 w-4" />
                 Editar
               </Link>
             </Button>
-          </div>
-        )}
-      </div>
+          ) : undefined
+        }
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-        <div className="mb-8">
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-primary/20">
-              <FolderKanban className="h-8 w-8 text-primary" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                  {projeto.nome}
-                </h1>
-                {projeto.isOficial && (
-                  <BadgeCheck className="h-6 w-6 text-primary" />
-                )}
-              </div>
-              <p className="text-muted-foreground">
-                {TIPO_PROJETO_LABELS[projeto.tipo as TipoProjeto]}
-              </p>
-            </div>
-          </div>
-        </div>
-
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <Card>
@@ -197,6 +196,8 @@ export function ProjetoDetalhePageClient() {
                 </div>
               </CardContent>
             </Card>
+
+            <EntityMediaSections media={projectQuery.data?.mediaAssets} />
           </div>
 
           <div className="space-y-6">

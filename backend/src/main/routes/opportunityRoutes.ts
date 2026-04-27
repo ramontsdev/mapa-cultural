@@ -5,6 +5,7 @@ import { adaptExpressRoute } from '@/main/adapters/express/expressRouteAdapter';
 import { makeCreateOpportunityController } from '@/main/factories/controllers/opportunity/createOpportunityControllerFactory';
 import { makeDeleteOpportunityController } from '@/main/factories/controllers/opportunity/deleteOpportunityControllerFactory';
 import { makeListMyOpportunitiesController } from '@/main/factories/controllers/opportunity/listMyOpportunitiesControllerFactory';
+import { makeUpdateOpportunityController } from '@/main/factories/controllers/opportunity/updateOpportunityControllerFactory';
 import { makeListOpportunitiesController } from '@/main/factories/controllers/opportunity/listOpportunitiesControllerFactory';
 import { makeCreateRegistrationController } from '@/main/factories/controllers/registration/createRegistrationControllerFactory';
 import { makeAuthenticationMiddleware } from '@/main/factories/middlewares/authenticationMiddlewareFactory';
@@ -30,6 +31,12 @@ opportunityRoutes.delete(
   '/opportunities/:id',
   adaptExpressMiddleware(makeAuthenticationMiddleware()),
   adaptExpressRoute(makeDeleteOpportunityController()),
+);
+
+opportunityRoutes.patch(
+  '/opportunities/:id',
+  adaptExpressMiddleware(makeAuthenticationMiddleware()),
+  adaptExpressRoute(makeUpdateOpportunityController()),
 );
 
 opportunityRoutes.get('/opportunities/:id', adaptExpressRoute(new GetOpportunityByIdController()));

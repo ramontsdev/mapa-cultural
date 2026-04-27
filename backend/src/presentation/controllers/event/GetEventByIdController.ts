@@ -1,4 +1,6 @@
+import { findMediaForOwner } from '@/infra/prisma/mediaOwnership';
 import { prismaClient } from '@/infra/prisma/prismaClient';
+import { MediaOwnerType } from '@/main/db/prisma/generated/enums';
 import { notFound, ok } from '@/presentation/helpers/httpHelpers';
 import { IController } from '@/presentation/protocols/controller';
 import { HttpRequest, HttpResponse } from '@/presentation/protocols/http';
@@ -21,7 +23,9 @@ export class GetEventByIdController implements IController {
 
     if (!event) return notFound({ error: 'Evento não encontrado' });
 
-    return ok(event);
+    const mediaAssets = await findMediaForOwner(MediaOwnerType.EVENT, id);
+
+    return ok({ ...event, mediaAssets });
   }
 }
 

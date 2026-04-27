@@ -4,6 +4,8 @@ import { randomUUID } from 'node:crypto';
 
 import bcrypt from 'bcryptjs';
 
+import { MediaKind, MediaOwnerType } from '../src/main/db/prisma/generated/enums';
+
 import { prismaClient } from '../src/infra/prisma/prismaClient';
 
 /**
@@ -96,6 +98,7 @@ async function cleanDatabase() {
     TRUNCATE TABLE
       "registration",
       "registration_step",
+      "media_asset",
       "opportunity",
       "event_occurrence",
       "event",
@@ -137,6 +140,8 @@ type UserAgentSeed = {
   roles: UserRole[];
   instagram?: string;
   website?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 type CreatedAgent = { userId: string; agentId: string; name: string; tipoAtuacao: 'individual' | 'coletivo' };
@@ -186,6 +191,7 @@ async function createUserWithAgent(seed: UserAgentSeed): Promise<CreatedAgent> {
       INSERT INTO "agent" (
         "id", "app_user_id", "type", "name", "public_location", "location",
         "_geo_location", "short_description", "long_description",
+        "avatar_url", "cover_url",
         "create_timestamp", "status", "parent_id", "user_id",
         "update_timestamp", "subsite_id"
       ) VALUES (
@@ -198,6 +204,8 @@ async function createUserWithAgent(seed: UserAgentSeed): Promise<CreatedAgent> {
         ${''},
         ${shortDescription},
         ${seed.biografia},
+        ${seed.avatarUrl ?? null},
+        ${seed.coverUrl ?? null},
         ${new Date()},
         ${1},
         ${null},
@@ -245,6 +253,8 @@ type SpaceSeed = {
   website?: string;
   horario?: string;
   instagram?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 const TIPO_LUGAR_TO_INT: Record<TipoLugar, number> = {
@@ -284,7 +294,9 @@ async function createSpace(seed: SpaceSeed): Promise<string> {
   await prismaClient.$executeRaw`
     INSERT INTO "space" (
       "id", "location", "_geo_location", "name", "public",
-      "short_description", "long_description", "create_timestamp", "status",
+      "short_description", "long_description",
+      "avatar_url", "cover_url",
+      "create_timestamp", "status",
       "type", "agent_id", "update_timestamp", "subsite_id", "parent_id"
     ) VALUES (
       ${id},
@@ -294,6 +306,8 @@ async function createSpace(seed: SpaceSeed): Promise<string> {
       ${true},
       ${shortDescription},
       ${seed.descricao},
+      ${seed.avatarUrl ?? null},
+      ${seed.coverUrl ?? null},
       ${new Date()},
       ${1},
       ${TIPO_LUGAR_TO_INT[seed.tipo]},
@@ -321,6 +335,8 @@ type ProjectSeed = {
   endsOn?: string;
   areas: AreaAtuacao[];
   imagem?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 async function createProject(seed: ProjectSeed): Promise<string> {
@@ -336,6 +352,8 @@ async function createProject(seed: ProjectSeed): Promise<string> {
         imagem: seed.imagem,
       }),
       longDescription: seed.descricaoLonga,
+      avatarUrl: seed.avatarUrl ?? null,
+      coverUrl: seed.coverUrl ?? seed.imagem ?? null,
       updateTimestamp: null,
       startsOn: seed.startsOn ? toOnlyDate(seed.startsOn) : null,
       endsOn: seed.endsOn ? toOnlyDate(seed.endsOn) : null,
@@ -368,6 +386,8 @@ type EventSeed = {
   areas: AreaAtuacao[];
   tags?: string[];
   imagem?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   spaceId: string;
 };
 
@@ -388,6 +408,8 @@ async function createEventWithOccurrence(seed: EventSeed): Promise<string> {
       shortDescription,
       longDescription: seed.descricaoLonga,
       rules: null,
+      avatarUrl: seed.avatarUrl ?? null,
+      coverUrl: seed.coverUrl ?? seed.imagem ?? null,
       createTimestamp: new Date(),
       status: 1,
       agentId: seed.agentId,
@@ -445,6 +467,8 @@ type OpportunitySeed = {
   areas: AreaAtuacao[];
   objectType: 'Event' | 'Project';
   objectId: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 const MAPAS_OBJECT_TYPE = {
@@ -468,6 +492,8 @@ async function createOpportunity(seed: OpportunitySeed): Promise<string> {
       opportunityType: 1,
       name: seed.name,
       shortDescription,
+      avatarUrl: seed.avatarUrl ?? null,
+      coverUrl: seed.coverUrl ?? null,
       registrationFrom: new Date(seed.registrationFrom),
       registrationTo: new Date(seed.registrationTo),
       publishedRegistrations: false,
@@ -484,6 +510,117 @@ async function createOpportunity(seed: OpportunitySeed): Promise<string> {
   });
 
   return opportunity.id;
+}
+
+// --------------------------- media (galerias / vídeos / docs) -------------
+
+/**
+ * URLs públicas só para demo visual (equivalente a arquivos no bucket).
+ * Use sempre estas chaves nos `createProject` / `createEventWithOccurrence` / capas de entidades.
+ */
+const DEMO_IMG = {
+  musica1:
+    'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
+  musica2:
+    'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1200&q=80',
+  showBlues:
+    'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=1200&q=80',
+  oficinaPercussao:
+    'https://images.unsplash.com/photo-1519683109079-d5f539e1542f?auto=format&fit=crop&w=1200&q=80',
+  oficinaItinerante:
+    'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1200&q=80',
+  teatro1:
+    'https://images.unsplash.com/photo-1503095396549-807759245b35?auto=format&fit=crop&w=1200&q=80',
+  arte1:
+    'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1200&q=80',
+  arte2:
+    'https://images.unsplash.com/photo-1460661414201-7d2ceff7ff83?auto=format&fit=crop&w=1200&q=80',
+  cultura1:
+    'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=1200&q=80',
+  leitura1:
+    'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=80',
+  literaturaGrio:
+    'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1200&q=80',
+  festivalLiterario:
+    'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?auto=format&fit=crop&w=1200&q=80',
+  paisagemSarau:
+    'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+  deltaParnaiba:
+    'https://images.unsplash.com/photo-1489844097929-c8d5b91c456e?auto=format&fit=crop&w=1200&q=80',
+  espaco1:
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
+  /** Casa de show / bar com palco (demo). */
+  barShow:
+    'https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1200&q=80',
+  /** Salão de museu / exposição (demo). */
+  museuInterior:
+    'https://images.unsplash.com/photo-1566737230800-09081252be9a?auto=format&fit=crop&w=1200&q=80',
+} as const;
+
+/** Avatares (perfil/logo) para seed — URLs públicas. */
+const DEMO_AVATAR = {
+  woman1:
+    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=400&q=80',
+  woman2:
+    'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=400&q=80',
+  group1:
+    'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=400&q=80',
+  man1:
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+  man2:
+    'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+  performance:
+    'https://images.unsplash.com/photo-1540039155733-5bb30b53aa88?auto=format&fit=crop&w=400&q=80',
+} as const;
+
+const DEMO_YOUTUBE = {
+  /** Vídeo genérico de apresentação cultural (miniatura oficial do YouTube). */
+  workshop: 'https://www.youtube.com/watch?v=EngW7tLk6R8',
+  thumbWorkshop: 'https://img.youtube.com/vi/EngW7tLk6R8/hqdefault.jpg',
+  documentario: 'https://www.youtube.com/watch?v=8S0FDjFBj8o',
+  thumbDoc: 'https://img.youtube.com/vi/8S0FDjFBj8o/hqdefault.jpg',
+} as const;
+
+/** PDF público pequeno (exemplo de documento para download). */
+const DEMO_PDF_W3C =
+  'https://www.w3.org/WAI/WCAG21/Techniques/pdf/img/table-word.pdf';
+
+type MediaSeedRow = {
+  ownerType: MediaOwnerType;
+  ownerId: string;
+  kind: MediaKind;
+  url: string;
+  thumbnailUrl?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+  s3Key?: string | null;
+  sortOrder: number;
+};
+
+async function seedMediaAssets(rows: MediaSeedRow[]) {
+  if (rows.length === 0) return;
+
+  const now = new Date();
+
+  await prismaClient.mediaAsset.createMany({
+    data: rows.map((r) => ({
+      id: randomUUID(),
+      ownerType: r.ownerType,
+      ownerId: r.ownerId,
+      kind: r.kind,
+      url: r.url,
+      thumbnailUrl: r.thumbnailUrl ?? null,
+      title: r.title ?? null,
+      caption: r.caption ?? null,
+      fileName: r.fileName ?? null,
+      mimeType: r.mimeType ?? null,
+      s3Key: r.s3Key ?? null,
+      sortOrder: r.sortOrder,
+      createTimestamp: now,
+    })),
+  });
 }
 
 // ----------------------------- main --------------------------------------
@@ -510,6 +647,8 @@ async function main() {
     roles: ['artista', 'educador'],
     instagram: 'mariaclarasilvapi',
     website: 'https://mariaclarasilva.art',
+    avatarUrl: DEMO_AVATAR.woman1,
+    coverUrl: DEMO_IMG.musica1,
   });
 
   const coletivoRaizes = await createUserWithAgent({
@@ -526,6 +665,8 @@ async function main() {
     areas: ['musica', 'danca', 'teatro', 'cultura_popular'],
     roles: ['produtor_cultural', 'promotor_eventos'],
     instagram: 'coletivoraizespi',
+    avatarUrl: DEMO_AVATAR.group1,
+    coverUrl: DEMO_IMG.cultura1,
   });
 
   const joaoPedro = await createUserWithAgent({
@@ -542,6 +683,8 @@ async function main() {
     areas: ['artes_visuais', 'patrimonio_cultural'],
     roles: ['artista', 'pesquisador'],
     instagram: 'joaopedro.art',
+    avatarUrl: DEMO_AVATAR.man1,
+    coverUrl: DEMO_IMG.arte1,
   });
 
   const anaLuiza = await createUserWithAgent({
@@ -558,6 +701,8 @@ async function main() {
     areas: ['literatura', 'teatro'],
     roles: ['artista', 'pesquisador', 'educador'],
     instagram: 'analuiza.escreve',
+    avatarUrl: DEMO_AVATAR.woman2,
+    coverUrl: DEMO_IMG.leitura1,
   });
 
   const ciaSertao = await createUserWithAgent({
@@ -574,6 +719,8 @@ async function main() {
     areas: ['teatro', 'danca', 'cultura_popular'],
     roles: ['artista', 'produtor_cultural'],
     instagram: 'ciasertaobrincante',
+    avatarUrl: DEMO_AVATAR.performance,
+    coverUrl: DEMO_IMG.teatro1,
   });
 
   const rafaelMendes = await createUserWithAgent({
@@ -590,6 +737,8 @@ async function main() {
     areas: ['audiovisual', 'musica'],
     roles: ['artista', 'produtor_cultural'],
     instagram: 'rafaelmendes.filma',
+    avatarUrl: DEMO_AVATAR.man2,
+    coverUrl: DEMO_IMG.musica2,
   });
 
   console.info('🏠 Criando espaços (lugares)…');
@@ -614,6 +763,8 @@ async function main() {
     website: 'https://bardoblues.pi',
     horario: 'Qui–Sáb, 19h às 02h',
     instagram: 'bardoblues.pi',
+    avatarUrl: DEMO_AVATAR.woman1,
+    coverUrl: DEMO_IMG.barShow,
   });
 
   const casaCulturaParnaiba = await createSpace({
@@ -636,6 +787,8 @@ async function main() {
     telefone: '(86) 3322-4000',
     horario: 'Ter–Dom, 9h às 21h',
     instagram: 'casaculturaparnaiba',
+    avatarUrl: DEMO_AVATAR.group1,
+    coverUrl: DEMO_IMG.cultura1,
   });
 
   const teatro4Setembro = await createSpace({
@@ -657,6 +810,8 @@ async function main() {
     areas: ['teatro', 'danca', 'musica'],
     telefone: '(86) 3221-0909',
     horario: 'Conforme programação',
+    avatarUrl: DEMO_AVATAR.performance,
+    coverUrl: DEMO_IMG.teatro1,
   });
 
   const galeriaArtePiaui = await createSpace({
@@ -679,6 +834,8 @@ async function main() {
     website: 'https://galeriaartepi.com.br',
     horario: 'Ter–Sáb, 10h às 19h',
     instagram: 'galeriaartepiaui',
+    avatarUrl: DEMO_AVATAR.man1,
+    coverUrl: DEMO_IMG.arte2,
   });
 
   const bibliotecaParque = await createSpace({
@@ -700,6 +857,8 @@ async function main() {
     areas: ['literatura', 'audiovisual'],
     telefone: '(86) 3216-3000',
     horario: 'Seg–Sáb, 8h às 21h',
+    avatarUrl: DEMO_AVATAR.woman2,
+    coverUrl: DEMO_IMG.leitura1,
   });
 
   const museuPiaui = await createSpace({
@@ -720,6 +879,8 @@ async function main() {
     acessibilidade: true,
     areas: ['patrimonio_cultural', 'artes_visuais', 'cultura_popular'],
     horario: 'Ter–Dom, 9h às 18h',
+    avatarUrl: DEMO_AVATAR.man1,
+    coverUrl: DEMO_IMG.museuInterior,
   });
 
   console.info('📁 Criando projetos…');
@@ -736,8 +897,8 @@ async function main() {
     startsOn: '2026-08-10',
     endsOn: '2026-08-17',
     areas: ['musica', 'danca', 'teatro', 'cultura_popular'],
-    imagem:
-      'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.cultura1,
+    avatarUrl: DEMO_AVATAR.group1,
   });
 
   const oficinasItinerantes = await createProject({
@@ -753,8 +914,8 @@ async function main() {
     startsOn: '2026-03-01',
     endsOn: '2026-11-30',
     areas: ['teatro', 'danca', 'cultura_popular'],
-    imagem:
-      'https://images.unsplash.com/photo-1516280440614-37939bbacd81?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.oficinaItinerante,
+    avatarUrl: DEMO_AVATAR.performance,
   });
 
   const mapeamentoGrios = await createProject({
@@ -770,8 +931,8 @@ async function main() {
     startsOn: '2026-02-01',
     endsOn: '2027-01-31',
     areas: ['literatura', 'patrimonio_cultural', 'cultura_popular'],
-    imagem:
-      'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.literaturaGrio,
+    avatarUrl: DEMO_AVATAR.woman2,
   });
 
   const residenciaDelta = await createProject({
@@ -787,8 +948,8 @@ async function main() {
     startsOn: '2026-09-01',
     endsOn: '2026-10-01',
     areas: ['audiovisual', 'musica'],
-    imagem:
-      'https://images.unsplash.com/photo-1489844097929-c8d5b91c456e?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.deltaParnaiba,
+    avatarUrl: DEMO_AVATAR.man2,
   });
 
   const circuitoTeatral = await createProject({
@@ -804,10 +965,12 @@ async function main() {
     startsOn: '2026-06-01',
     endsOn: '2026-09-30',
     areas: ['teatro', 'danca'],
+    avatarUrl: DEMO_AVATAR.performance,
+    coverUrl: DEMO_IMG.teatro1,
   });
 
   console.info('🎶 Criando eventos com ocorrências…');
-  await createEventWithOccurrence({
+  const evtNoiteBlues = await createEventWithOccurrence({
     name: 'Noite de Blues - Edição Especial',
     agentId: mariaClara.agentId,
     projectId: null,
@@ -823,12 +986,12 @@ async function main() {
     preco: 25,
     areas: ['musica', 'cultura_popular'],
     tags: ['blues', 'música ao vivo', 'show'],
-    imagem:
-      'https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.showBlues,
+    avatarUrl: DEMO_AVATAR.woman1,
     spaceId: barDoBlues,
   });
 
-  await createEventWithOccurrence({
+  const evtPercussao = await createEventWithOccurrence({
     name: 'Oficina de Percussão Nordestina',
     agentId: coletivoRaizes.agentId,
     projectId: oficinasItinerantes,
@@ -843,12 +1006,12 @@ async function main() {
     entrada: 'gratuito',
     areas: ['musica', 'cultura_popular'],
     tags: ['percussão', 'oficina', 'nordeste'],
-    imagem:
-      'https://images.unsplash.com/photo-1519683109079-d5f539e1542f?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.oficinaPercussao,
+    avatarUrl: DEMO_AVATAR.group1,
     spaceId: casaCulturaParnaiba,
   });
 
-  await createEventWithOccurrence({
+  const evtEspetaculo = await createEventWithOccurrence({
     name: 'Espetáculo "Raízes do Sertão"',
     agentId: ciaSertao.agentId,
     projectId: circuitoTeatral,
@@ -864,12 +1027,12 @@ async function main() {
     preco: 40,
     areas: ['teatro', 'danca', 'cultura_popular'],
     tags: ['teatro', 'dança', 'sertão'],
-    imagem:
-      'https://images.unsplash.com/photo-1503095396549-807759245b35?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.teatro1,
+    avatarUrl: DEMO_AVATAR.performance,
     spaceId: teatro4Setembro,
   });
 
-  await createEventWithOccurrence({
+  const evtExposicao = await createEventWithOccurrence({
     name: 'Exposição "Arte Piauiense Contemporânea"',
     agentId: joaoPedro.agentId,
     projectId: null,
@@ -885,12 +1048,12 @@ async function main() {
     entrada: 'gratuito',
     areas: ['artes_visuais'],
     tags: ['exposição', 'arte contemporânea', 'coletiva'],
-    imagem:
-      'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.arte1,
+    avatarUrl: DEMO_AVATAR.man1,
     spaceId: galeriaArtePiaui,
   });
 
-  await createEventWithOccurrence({
+  const evtFestivalLit = await createEventWithOccurrence({
     name: 'Festival Literário de Teresina',
     agentId: anaLuiza.agentId,
     projectId: mapeamentoGrios,
@@ -906,12 +1069,12 @@ async function main() {
     entrada: 'gratuito',
     areas: ['literatura'],
     tags: ['literatura', 'sarau', 'festival'],
-    imagem:
-      'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.festivalLiterario,
+    avatarUrl: DEMO_AVATAR.woman2,
     spaceId: bibliotecaParque,
   });
 
-  await createEventWithOccurrence({
+  const evtSarau = await createEventWithOccurrence({
     name: 'Sarau Musical ao Pôr do Sol',
     agentId: rafaelMendes.agentId,
     projectId: residenciaDelta,
@@ -926,40 +1089,32 @@ async function main() {
     entrada: 'gratuito',
     areas: ['musica'],
     tags: ['sarau', 'mpb', 'pôr do sol'],
-    imagem:
-      'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1200&q=80',
+    imagem: DEMO_IMG.paisagemSarau,
+    avatarUrl: DEMO_AVATAR.man2,
     spaceId: casaCulturaParnaiba,
   });
 
-  const eventNoiteBlues = await prismaClient.event.findFirst({
-    where: { name: 'Noite de Blues - Edição Especial' },
-  });
-
-  const eventExposicao = await prismaClient.event.findFirst({
-    where: { name: 'Exposição "Arte Piauiense Contemporânea"' },
-  });
-
   console.info('📣 Criando oportunidades…');
-  if (eventNoiteBlues) {
-    await createOpportunity({
-      name: 'Prêmio Mestres da Cultura Piauiense 2026',
-      agentId: mariaClara.agentId,
-      tipo: 'premio',
-      descricao:
-        'Prêmio anual que reconhece o trabalho de 10 mestres e mestras da cultura tradicional do Piauí. Inscrições abertas para autoindicação e indicação por terceiros.',
-      registrationFrom: '2026-04-01T00:00:00.000Z',
-      registrationTo: '2026-06-30T23:59:59.000Z',
-      requisitos:
-        'Ser morador de algum município do Piauí e atuar há pelo menos 10 anos em manifestação tradicional.',
-      valorPremio: 10000,
-      link: 'https://mapacultural.pi.gov.br/premios/mestres-2026',
-      areas: ['cultura_popular', 'musica', 'danca'],
-      objectType: 'Event',
-      objectId: eventNoiteBlues.id,
-    });
-  }
+  const oppPremioMestres = await createOpportunity({
+    name: 'Prêmio Mestres da Cultura Piauiense 2026',
+    agentId: mariaClara.agentId,
+    tipo: 'premio',
+    descricao:
+      'Prêmio anual que reconhece o trabalho de 10 mestres e mestras da cultura tradicional do Piauí. Inscrições abertas para autoindicação e indicação por terceiros.',
+    registrationFrom: '2026-04-01T00:00:00.000Z',
+    registrationTo: '2026-06-30T23:59:59.000Z',
+    requisitos:
+      'Ser morador de algum município do Piauí e atuar há pelo menos 10 anos em manifestação tradicional.',
+    valorPremio: 10000,
+    link: 'https://mapacultural.pi.gov.br/premios/mestres-2026',
+    areas: ['cultura_popular', 'musica', 'danca'],
+    objectType: 'Event',
+    objectId: evtNoiteBlues,
+    avatarUrl: DEMO_AVATAR.woman1,
+    coverUrl: DEMO_IMG.showBlues,
+  });
 
-  await createOpportunity({
+  const oppBolsaPesquisa = await createOpportunity({
     name: 'Bolsa de Pesquisa em Culturas Populares',
     agentId: anaLuiza.agentId,
     tipo: 'bolsa',
@@ -974,9 +1129,11 @@ async function main() {
     areas: ['literatura', 'patrimonio_cultural', 'cultura_popular'],
     objectType: 'Project',
     objectId: mapeamentoGrios,
+    avatarUrl: DEMO_AVATAR.woman2,
+    coverUrl: DEMO_IMG.literaturaGrio,
   });
 
-  await createOpportunity({
+  const oppEditalCulturaViva = await createOpportunity({
     name: 'Edital Cultura Viva Piauí 2026',
     agentId: coletivoRaizes.agentId,
     tipo: 'edital',
@@ -991,36 +1148,334 @@ async function main() {
     areas: ['musica', 'danca', 'teatro', 'artes_visuais', 'cultura_popular'],
     objectType: 'Project',
     objectId: festivalEncontro,
+    avatarUrl: DEMO_AVATAR.group1,
+    coverUrl: DEMO_IMG.cultura1,
   });
 
-  if (eventExposicao) {
-    await createOpportunity({
-      name: 'Residência Artística Casa da Cultura',
-      agentId: coletivoRaizes.agentId,
-      tipo: 'residencia',
-      descricao:
-        'Residência de 30 dias em Parnaíba para artistas visuais e performers trabalharem coletivamente em uma obra coletiva.',
-      registrationFrom: '2026-04-15T00:00:00.000Z',
-      registrationTo: '2026-06-15T23:59:59.000Z',
-      requisitos:
-        'Artistas com portfólio de pelo menos 3 anos de atuação. Serão selecionados 8 residentes com ajuda de custo e hospedagem.',
-      valorPremio: 5000,
-      link: 'https://casaculturaparnaiba.pi/residencia-2026',
-      areas: ['artes_visuais', 'audiovisual'],
-      objectType: 'Event',
-      objectId: eventExposicao.id,
-    });
-  }
+  const oppResidencia = await createOpportunity({
+    name: 'Residência Artística Casa da Cultura',
+    agentId: coletivoRaizes.agentId,
+    tipo: 'residencia',
+    descricao:
+      'Residência de 30 dias em Parnaíba para artistas visuais e performers trabalharem coletivamente em uma obra coletiva.',
+    registrationFrom: '2026-04-15T00:00:00.000Z',
+    registrationTo: '2026-06-15T23:59:59.000Z',
+    requisitos:
+      'Artistas com portfólio de pelo menos 3 anos de atuação. Serão selecionados 8 residentes com ajuda de custo e hospedagem.',
+    valorPremio: 5000,
+    link: 'https://casaculturaparnaiba.pi/residencia-2026',
+    areas: ['artes_visuais', 'audiovisual'],
+    objectType: 'Event',
+    objectId: evtExposicao,
+    avatarUrl: DEMO_AVATAR.man1,
+    coverUrl: DEMO_IMG.arte1,
+  });
+
+  console.info('🖼️ Criando mídias de demonstração (galerias, vídeos, documentos)…');
+  await seedMediaAssets([
+    // Agente — Maria Clara: portfólio, fotos e vídeo
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: mariaClara.agentId,
+      kind: MediaKind.DOCUMENT,
+      url: DEMO_PDF_W3C,
+      title: 'Portfólio — Maria Clara Silva',
+      fileName: 'portfolio-maria-clara.pdf',
+      mimeType: 'application/pdf',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: mariaClara.agentId,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica1,
+      title: 'Blues no palco',
+      caption: 'Apresentação no Bar do Blues',
+      sortOrder: 1,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: mariaClara.agentId,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica2,
+      caption: 'Ensaio acústico',
+      sortOrder: 2,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: mariaClara.agentId,
+      kind: MediaKind.VIDEO,
+      url: DEMO_YOUTUBE.workshop,
+      thumbnailUrl: DEMO_YOUTUBE.thumbWorkshop,
+      title: 'Oficina de voz e improviso',
+      sortOrder: 3,
+    },
+    // Coletivo Raízes: galeria e documento
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: coletivoRaizes.agentId,
+      kind: MediaKind.DOCUMENT,
+      url: DEMO_PDF_W3C,
+      title: 'Dossiê do Coletivo Raízes',
+      fileName: 'dossie-coletivo-raizes.pdf',
+      mimeType: 'application/pdf',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: coletivoRaizes.agentId,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.cultura1,
+      caption: 'Encontro de culturas populares',
+      sortOrder: 1,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: coletivoRaizes.agentId,
+      kind: MediaKind.VIDEO,
+      url: DEMO_YOUTUBE.documentario,
+      thumbnailUrl: DEMO_YOUTUBE.thumbDoc,
+      title: 'Registro audiovisual do festival',
+      sortOrder: 2,
+    },
+    // João Pedro: galeria de artes visuais
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: joaoPedro.agentId,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte1,
+      caption: 'Série “Cores do sertão”',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.AGENT,
+      ownerId: joaoPedro.agentId,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte2,
+      caption: 'Instalação em Teresina',
+      sortOrder: 1,
+    },
+    // Espaço — Bar do Blues
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: barDoBlues,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.espaco1,
+      caption: 'Ambiente do bar cultural',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: barDoBlues,
+      kind: MediaKind.VIDEO,
+      url: DEMO_YOUTUBE.workshop,
+      thumbnailUrl: DEMO_YOUTUBE.thumbWorkshop,
+      title: 'Trecho de show ao vivo',
+      sortOrder: 1,
+    },
+    // Casa da Cultura de Parnaíba
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: casaCulturaParnaiba,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.teatro1,
+      caption: 'Oficina no pátio',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: casaCulturaParnaiba,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.cultura1,
+      caption: 'Roda de conversa com mestres',
+      sortOrder: 1,
+    },
+    // Galeria Arte Piauí
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: galeriaArtePiaui,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte1,
+      caption: 'Sala principal',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.SPACE,
+      ownerId: galeriaArtePiaui,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte2,
+      caption: 'Vernissage coletivo',
+      sortOrder: 1,
+    },
+    // Projeto — Festival Encontro de Culturas
+    {
+      ownerType: MediaOwnerType.PROJECT,
+      ownerId: festivalEncontro,
+      kind: MediaKind.VIDEO,
+      url: DEMO_YOUTUBE.documentario,
+      thumbnailUrl: DEMO_YOUTUBE.thumbDoc,
+      title: 'Caravana cultural — trecho',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.PROJECT,
+      ownerId: festivalEncontro,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.cultura1,
+      caption: 'Abertura do festival',
+      sortOrder: 1,
+    },
+    {
+      ownerType: MediaOwnerType.PROJECT,
+      ownerId: festivalEncontro,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica2,
+      caption: 'Palco principal',
+      sortOrder: 2,
+    },
+    // Projeto — Oficinas itinerantes
+    {
+      ownerType: MediaOwnerType.PROJECT,
+      ownerId: oficinasItinerantes,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.teatro1,
+      caption: 'Oficina de percussão no interior',
+      sortOrder: 0,
+    },
+    // Evento — Espetáculo (galeria como no print de eventos)
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtEspetaculo,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.teatro1,
+      caption: 'Ensaio geral no Teatro 4 de Setembro',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtEspetaculo,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica1,
+      caption: 'Musicalidade ao vivo',
+      sortOrder: 1,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtEspetaculo,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.cultura1,
+      caption: 'Plateia — noite de estreia',
+      sortOrder: 2,
+    },
+    // Evento — Exposição
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtExposicao,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte1,
+      caption: 'Obras em destaque',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtExposicao,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte2,
+      caption: 'Visitação mediada',
+      sortOrder: 1,
+    },
+    // Evento — Festival literário
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtFestivalLit,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.leitura1,
+      caption: 'Mesa de lançamentos',
+      sortOrder: 0,
+    },
+    // Oportunidades — editais e regulamentos
+    {
+      ownerType: MediaOwnerType.OPPORTUNITY,
+      ownerId: oppEditalCulturaViva,
+      kind: MediaKind.DOCUMENT,
+      url: DEMO_PDF_W3C,
+      title: 'Edital Cultura Viva — anexo modelo',
+      fileName: 'edital-cultura-viva-anexo.pdf',
+      mimeType: 'application/pdf',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.OPPORTUNITY,
+      ownerId: oppPremioMestres,
+      kind: MediaKind.DOCUMENT,
+      url: DEMO_PDF_W3C,
+      title: 'Regulamento do prêmio',
+      fileName: 'regulamento-premio-mestres.pdf',
+      mimeType: 'application/pdf',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.OPPORTUNITY,
+      ownerId: oppBolsaPesquisa,
+      kind: MediaKind.DOCUMENT,
+      url: DEMO_PDF_W3C,
+      title: 'Chamamento — bolsa de pesquisa',
+      fileName: 'chamamento-bolsa.pdf',
+      mimeType: 'application/pdf',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.OPPORTUNITY,
+      ownerId: oppBolsaPesquisa,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.leitura1,
+      caption: 'Pesquisa em campo — griôs',
+      sortOrder: 1,
+    },
+    {
+      ownerType: MediaOwnerType.OPPORTUNITY,
+      ownerId: oppResidencia,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.arte2,
+      caption: 'Residência — referência visual',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtNoiteBlues,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica1,
+      caption: 'Noite de blues — edição especial',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtPercussao,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica2,
+      caption: 'Oficina de percussão nordestina',
+      sortOrder: 0,
+    },
+    {
+      ownerType: MediaOwnerType.EVENT,
+      ownerId: evtSarau,
+      kind: MediaKind.IMAGE,
+      url: DEMO_IMG.musica2,
+      caption: 'Sarau ao pôr do sol em Parnaíba',
+      sortOrder: 0,
+    },
+  ]);
 
   console.info('\n✅ Seed concluído com sucesso!\n');
 
-  const [agentsCount, spacesCount, eventsCount, projectsCount, opportunitiesCount] =
+  const [agentsCount, spacesCount, eventsCount, projectsCount, opportunitiesCount, mediaCount] =
     await Promise.all([
       prismaClient.agent.count(),
       prismaClient.space.count(),
       prismaClient.event.count(),
       prismaClient.project.count(),
       prismaClient.opportunity.count(),
+      prismaClient.mediaAsset.count(),
     ]);
 
   console.info('📊 Totais no banco:');
@@ -1029,6 +1484,7 @@ async function main() {
   console.info(`   Eventos.......: ${eventsCount}`);
   console.info(`   Projetos......: ${projectsCount}`);
   console.info(`   Oportunidades.: ${opportunitiesCount}`);
+  console.info(`   Mídias........: ${mediaCount}`);
   console.info(`\n🔐 Senha padrão para todos os usuários: ${PASSWORD}`);
   console.info('📧 Emails criados:');
   for (const agent of [

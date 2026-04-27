@@ -143,6 +143,14 @@ export const criarEspacoRapidoSchema = z.object({
 
 export type CriarEspacoRapidoFormData = z.infer<typeof criarEspacoRapidoSchema>;
 
+const optionalHttpImageUrl = z
+  .string()
+  .optional()
+  .refine(
+    (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
+    "URL inválida",
+  );
+
 /** Edição completa do espaço (rascunho ou publicado). */
 export const espacoEdicaoFormSchema = z.object({
   nome: z.string().min(3, "Nome deve ter pelo menos 3 caracteres"),
@@ -171,6 +179,8 @@ export const espacoEdicaoFormSchema = z.object({
   facebook: z.string().optional(),
   twitter: z.string().optional(),
   youtube: z.string().optional(),
+  avatarUrl: optionalHttpImageUrl,
+  coverUrl: optionalHttpImageUrl,
 });
 
 export type EspacoEdicaoFormData = z.infer<typeof espacoEdicaoFormSchema>;
@@ -302,6 +312,7 @@ export const meuEventoEdicaoSchema = criarEventoRapidoSchema.extend({
       (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
       "URL da imagem inválida"
     ),
+  avatarUrl: optionalHttpImageUrl,
 });
 
 export type MeuEventoEdicaoFormData = z.infer<typeof meuEventoEdicaoSchema>;
@@ -329,6 +340,7 @@ export const meuProjetoEdicaoSchema = criarProjetoRapidoSchema.extend({
       (s) => !s?.trim() || /^https?:\/\//i.test(s.trim()),
       "URL da imagem inválida"
     ),
+  avatarUrl: optionalHttpImageUrl,
 });
 
 export type MeuProjetoEdicaoFormData = z.infer<typeof meuProjetoEdicaoSchema>;
@@ -338,6 +350,8 @@ export const meuAgenteEdicaoSchema = criarAgenteRapidoSchema.extend({
   cidade: z.string().optional(),
   estado: z.string().max(2).optional(),
   oQueFaz: z.string().max(200).optional(),
+  avatarUrl: optionalHttpImageUrl,
+  coverUrl: optionalHttpImageUrl,
 });
 
 export type MeuAgenteEdicaoFormData = z.infer<typeof meuAgenteEdicaoSchema>;

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityMediaManager } from "@/components/media/entity-media-manager";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,7 +70,8 @@ function projectToFormValues(project: ProjectDTO): MeuProjetoEdicaoFormData {
     dataInicio: projeto.dataInicio ?? "",
     dataFim: projeto.dataFim ?? "",
     parceiros: projeto.parceiros?.length ? projeto.parceiros.join(", ") : "",
-    imagem: "",
+    imagem: projeto.imagem ?? "",
+    avatarUrl: projeto.avatarUrl ?? "",
   };
 }
 
@@ -86,10 +88,18 @@ function formToPayload(data: MeuProjetoEdicaoFormData) {
     responsavel: data.responsavel,
     areas: data.areasAtuacao.join(","),
     parceiros: parceiros.join(","),
+    imagem: data.imagem?.trim() || undefined,
   });
+  const emptyToNull = (s: string | undefined) => {
+    const t = s?.trim();
+    return t === "" || t === undefined ? null : t;
+  };
+
   return {
     name: data.nome,
     shortDescription,
+    avatarUrl: emptyToNull(data.avatarUrl),
+    coverUrl: emptyToNull(data.imagem),
   };
 }
 
@@ -323,6 +333,42 @@ function EditarProjetoForm({ project }: { project: ProjectDTO }) {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="imagem"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>URL da imagem de capa (opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
+                          placeholder="https://"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="avatarUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>URL da foto de perfil (opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="url"
+                          placeholder="https://"
+                          {...field}
+                          value={field.value ?? ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </form>
             </Form>
 
@@ -350,6 +396,14 @@ function EditarProjetoForm({ project }: { project: ProjectDTO }) {
                 <Trash2 className="mr-2 h-4 w-4" />
                 Excluir
               </Button>
+            </div>
+
+            <div className="mt-8">
+              <EntityMediaManager
+                ownerType="PROJECT"
+                ownerId={project.id}
+                media={project.mediaAssets}
+              />
             </div>
           </CardContent>
         </Card>

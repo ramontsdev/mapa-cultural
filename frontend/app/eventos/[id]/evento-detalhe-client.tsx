@@ -16,6 +16,8 @@ import { useParams } from "next/navigation";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityProfileHero } from "@/components/entity/entity-profile-hero";
+import { EntityMediaSections } from "@/components/media/entity-media-sections";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMyAgent } from "@/hooks/api/use-agents";
@@ -76,51 +78,47 @@ export function EventoDetalhePageClient() {
       >
         {evento && (
           <>
-            <div className="border-b border-border bg-card">
-              <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex items-center gap-4">
+            <EntityProfileHero
+              coverUrl={evento.coverUrl}
+              avatarUrl={evento.avatarUrl}
+              avatarFallback={<CalendarDays className="h-14 w-14" />}
+              titleSlot={
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Link href="/eventos">
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" className="-ml-2 shrink-0">
                         <ArrowLeft className="h-5 w-5" />
                       </Button>
                     </Link>
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-lg bg-primary p-2">
-                        <CalendarDays className="h-6 w-6 text-primary-foreground" />
-                      </div>
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                            {evento.nome}
-                          </h1>
-                          {evento.isOficial && (
-                            <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Oficial
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {possoEditar && (
-                      <Button variant="secondary" className="gap-2" asChild>
-                        <Link href={`/eventos/${id}/editar`}>
-                          <Pencil className="h-4 w-4" />
-                          Editar
-                        </Link>
-                      </Button>
+                    <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                      {evento.nome}
+                    </h1>
+                    {evento.isOficial && (
+                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Oficial
+                      </span>
                     )}
-                    <Button variant="outline" className="gap-2">
-                      <Share2 className="h-4 w-4" />
-                      Compartilhar
-                    </Button>
                   </div>
                 </div>
-              </div>
-            </div>
+              }
+              actionsSlot={
+                <>
+                  {possoEditar && (
+                    <Button variant="secondary" className="gap-2" asChild>
+                      <Link href={`/eventos/${id}/editar`}>
+                        <Pencil className="h-4 w-4" />
+                        Editar
+                      </Link>
+                    </Button>
+                  )}
+                  <Button variant="outline" className="gap-2">
+                    <Share2 className="h-4 w-4" />
+                    Compartilhar
+                  </Button>
+                </>
+              }
+            />
 
             <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
               <div className="grid gap-8 lg:grid-cols-3">
@@ -178,6 +176,8 @@ export function EventoDetalhePageClient() {
                       </CardContent>
                     </Card>
                   )}
+
+                  <EntityMediaSections media={eventQuery.data?.mediaAssets} />
                 </div>
 
                 <div className="space-y-6">

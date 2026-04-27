@@ -28,6 +28,8 @@ export class CreateEventController implements IController {
         shortDescription: data.shortDescription ?? '',
         longDescription: data.longDescription ?? null,
         rules: data.rules ?? null,
+        avatarUrl: data.avatarUrl ?? null,
+        coverUrl: data.coverUrl ?? null,
         createTimestamp: new Date(),
         status: 1,
         agentId: agent.id,

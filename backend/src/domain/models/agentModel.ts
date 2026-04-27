@@ -7,6 +7,8 @@ export type AgentModel = {
   geoLocation: string;
   shortDescription: string | null;
   longDescription: string | null;
+  avatarUrl: string | null;
+  coverUrl: string | null;
   createTimestamp: Date;
   updateTimestamp: Date | null;
   status: number;

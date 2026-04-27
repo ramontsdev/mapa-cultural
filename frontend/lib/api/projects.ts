@@ -37,6 +37,8 @@ export type CreateProjectPayload = {
   name: string;
   shortDescription?: string;
   longDescription?: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export function createProject(

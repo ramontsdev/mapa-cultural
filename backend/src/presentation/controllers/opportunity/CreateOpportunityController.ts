@@ -45,6 +45,8 @@ export class CreateOpportunityController implements IController {
         opportunityType: 1,
         name: data.name,
         shortDescription: data.shortDescription,
+        avatarUrl: data.avatarUrl ?? null,
+        coverUrl: data.coverUrl ?? null,
         registrationFrom: new Date(data.registrationFrom),
         registrationTo: new Date(data.registrationTo),
         publishedRegistrations: false,

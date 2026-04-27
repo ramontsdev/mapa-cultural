@@ -33,18 +33,18 @@ export class UpdateSpaceController implements IController {
 
     const now = new Date();
 
-    await prismaClient.$executeRaw`
-      UPDATE "space"
-      SET
-        "name" = COALESCE(${data.name ?? null}, "name"),
-        "public" = COALESCE(${data.isPublic ?? null}, "public"),
-        "short_description" = COALESCE(${data.shortDescription ?? null}, "short_description"),
-        "long_description" = COALESCE(${data.longDescription ?? null}, "long_description"),
-        "update_timestamp" = ${now}
-      WHERE "id" = ${id};
-    `;
-
-    const updated = await prismaClient.space.findUnique({ where: { id } });
+    const updated = await prismaClient.space.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.isPublic !== undefined ? { isPublic: data.isPublic } : {}),
+        ...(data.shortDescription !== undefined ? { shortDescription: data.shortDescription } : {}),
+        ...(data.longDescription !== undefined ? { longDescription: data.longDescription } : {}),
+        ...(data.avatarUrl !== undefined ? { avatarUrl: data.avatarUrl } : {}),
+        ...(data.coverUrl !== undefined ? { coverUrl: data.coverUrl } : {}),
+        updateTimestamp: now,
+      },
+    });
 
     return ok(updated);
   }

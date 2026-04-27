@@ -55,6 +55,8 @@ model Agent {
   geoLocation      String    @map("_geo_location") @db.Text
   shortDescription String?   @map("short_description") @db.Text
   longDescription  String?   @map("long_description") @db.Text
+  avatarUrl        String?   @map("avatar_url") @db.Text
+  coverUrl         String?   @map("cover_url") @db.Text
   createTimestamp  DateTime  @map("create_timestamp")
   status           Int
   parentId         String?   @map("parent_id")
@@ -87,6 +89,8 @@ model Space {
   isPublic         Boolean   @map("public")
   shortDescription String?   @map("short_description") @db.Text
   longDescription  String?   @map("long_description") @db.Text
+  avatarUrl        String?   @map("avatar_url") @db.Text
+  coverUrl         String?   @map("cover_url") @db.Text
   createTimestamp  DateTime  @map("create_timestamp")
   status           Int
   spaceType        Int       @map("type")
@@ -110,6 +114,8 @@ model Project {
   name             String    @db.VarChar(255)
   shortDescription String?   @map("short_description") @db.Text
   longDescription  String?   @map("long_description") @db.Text
+  avatarUrl        String?   @map("avatar_url") @db.Text
+  coverUrl         String?   @map("cover_url") @db.Text
   updateTimestamp  DateTime? @map("update_timestamp")
   startsOn         DateTime? @map("starts_on")
   endsOn           DateTime? @map("ends_on")
@@ -135,6 +141,8 @@ model Event {
   shortDescription String    @default("") @map("short_description") @db.Text
   longDescription  String?   @map("long_description") @db.Text
   rules            String?   @map("rules") @db.Text
+  avatarUrl        String?   @map("avatar_url") @db.Text
+  coverUrl         String?   @map("cover_url") @db.Text
   createTimestamp  DateTime  @map("create_timestamp")
   status           Int
   agentId          String    @map("agent_id")
@@ -184,6 +192,8 @@ model Opportunity {
   opportunityType          Int       @map("type")
   name                     String    @db.VarChar(255)
   shortDescription         String    @map("short_description") @db.Text
+  avatarUrl                String?   @map("avatar_url") @db.Text
+  coverUrl                 String?   @map("cover_url") @db.Text
   registrationFrom         DateTime  @map("registration_from")
   registrationTo           DateTime  @map("registration_to")
   publishedRegistrations   Boolean   @default(false) @map("published_registrations")
@@ -254,4 +264,39 @@ model Registration {
   subsite     Subsite?    @relation(fields: [subsiteId], references: [id], onDelete: SetNull)
 
   @@map("registration")
+}
+
+enum MediaOwnerType {
+  AGENT
+  SPACE
+  PROJECT
+  EVENT
+  OPPORTUNITY
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+/// Mídias públicas (imagens, vídeos, documentos) vinculadas a entidades do mapa.
+/// Arquivos ficam no S3; `url` é a URL pública (ou de embed) do recurso.
+model MediaAsset {
+  id              String         @id @default(uuid())
+  ownerType       MediaOwnerType @map("owner_type")
+  ownerId         String         @map("owner_id") @db.VarChar(36)
+  kind            MediaKind
+  url             String         @db.Text
+  thumbnailUrl    String?        @map("thumbnail_url") @db.Text
+  title           String?        @db.VarChar(512)
+  caption         String?        @db.Text
+  fileName        String?        @map("file_name") @db.VarChar(512)
+  mimeType        String?        @map("mime_type") @db.VarChar(255)
+  s3Key           String?        @map("s3_key") @db.VarChar(1024)
+  sortOrder       Int            @default(0) @map("sort_order")
+  createTimestamp DateTime       @default(now()) @map("create_timestamp")
+
+  @@index([ownerType, ownerId, sortOrder], map: "media_owner_sort_idx")
+  @@map("media_asset")
 }

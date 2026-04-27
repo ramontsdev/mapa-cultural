@@ -21,6 +21,8 @@ import { toast } from "sonner";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
+import { EntityProfileHero } from "@/components/entity/entity-profile-hero";
+import { EntityMediaSections } from "@/components/media/entity-media-sections";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -167,46 +169,46 @@ export function OportunidadeDetalhePageClient() {
         emptyMessage="Oportunidade não encontrada"
       >
         {oportunidade && (
-          <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
-            <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
-              {possoEditar && (
-                <Button variant="secondary" className="gap-2" asChild>
-                  <Link href={`/oportunidades/${id}/editar`}>
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                  </Link>
-                </Button>
-              )}
-            </div>
+          <>
+            <EntityProfileHero
+              coverUrl={oportunidade.coverUrl}
+              avatarUrl={oportunidade.avatarUrl}
+              avatarFallback={<Lightbulb className="h-14 w-14" />}
+              titleSlot={
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                      {oportunidade.nome}
+                    </h1>
+                    {oportunidade.isOficial && (
+                      <BadgeCheck className="h-6 w-6 text-primary" />
+                    )}
+                  </div>
+                  <p className="text-muted-foreground">
+                    {
+                      TIPO_OPORTUNIDADE_LABELS[
+                        oportunidade.tipo as TipoOportunidade
+                      ]
+                    }
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">{getStatusBadge()}</div>
+                </>
+              }
+              actionsSlot={
+                possoEditar ? (
+                  <Button variant="secondary" className="gap-2" asChild>
+                    <Link href={`/oportunidades/${id}/editar`}>
+                      <Pencil className="h-4 w-4" />
+                      Editar
+                    </Link>
+                  </Button>
+                ) : undefined
+              }
+            />
 
+            <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
             <div className="grid gap-8 lg:grid-cols-3">
               <div className="space-y-6 lg:col-span-2">
-                <div>
-                  <div className="mb-4 flex items-center gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-secondary/20">
-                      <Lightbulb className="h-8 w-8 text-secondary" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                          {oportunidade.nome}
-                        </h1>
-                        {oportunidade.isOficial && (
-                          <BadgeCheck className="h-6 w-6 text-primary" />
-                        )}
-                      </div>
-                      <p className="text-muted-foreground">
-                        {
-                          TIPO_OPORTUNIDADE_LABELS[
-                            oportunidade.tipo as TipoOportunidade
-                          ]
-                        }
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">{getStatusBadge()}</div>
-                </div>
-
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -250,6 +252,8 @@ export function OportunidadeDetalhePageClient() {
                     </CardContent>
                   </Card>
                 )}
+
+                <EntityMediaSections media={opportunityQuery.data?.mediaAssets} />
               </div>
 
               <div className="space-y-6">
@@ -356,6 +360,7 @@ export function OportunidadeDetalhePageClient() {
               </div>
             </div>
           </div>
+          </>
         )}
       </QueryState>
     </div>

@@ -20,6 +20,8 @@ import { useMemo } from "react";
 
 import { MiniMapWrapper } from "@/app/lugares/[id]/mini-map-wrapper";
 import { QueryState } from "@/components/api/QueryState";
+import { EntityProfileHero } from "@/components/entity/entity-profile-hero";
+import { EntityMediaSections } from "@/components/media/entity-media-sections";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,54 +97,50 @@ export function LugarDetalhePageClient() {
         </div>
       </div>
 
-      <div className="border-b border-border bg-card">
-        <div className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-4">
+      <EntityProfileHero
+        coverUrl={lugar.coverUrl}
+        avatarUrl={lugar.avatarUrl}
+        avatarFallback={<Building2 className="h-14 w-14" />}
+        titleSlot={
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
               <Link href="/lugares">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="-ml-2 shrink-0">
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
               </Link>
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-secondary p-2">
-                  <Building2 className="h-6 w-6 text-secondary-foreground" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-foreground md:text-3xl">
-                      {lugar.nome}
-                    </h1>
-                    {lugar.isOficial && (
-                      <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Oficial
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-secondary">
-                    {TIPO_LUGAR_LABELS[lugar.tipo as TipoLugar]}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {podeEditar && (
-                <Button variant="outline" className="gap-2" asChild>
-                  <Link href={`/lugares/${lugar.id}/editar`}>
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                  </Link>
-                </Button>
+              <h1 className="text-2xl font-bold text-foreground md:text-3xl">
+                {lugar.nome}
+              </h1>
+              {lugar.isOficial && (
+                <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Oficial
+                </span>
               )}
-              <Button variant="outline" className="gap-2">
-                <Share2 className="h-4 w-4" />
-                Compartilhar
-              </Button>
             </div>
+            <p className="text-secondary pl-10 md:pl-12">
+              {TIPO_LUGAR_LABELS[lugar.tipo as TipoLugar]}
+            </p>
           </div>
-        </div>
-      </div>
+        }
+        actionsSlot={
+          <>
+            {podeEditar && (
+              <Button variant="outline" className="gap-2" asChild>
+                <Link href={`/lugares/${lugar.id}/editar`}>
+                  <Pencil className="h-4 w-4" />
+                  Editar
+                </Link>
+              </Button>
+            )}
+            <Button variant="outline" className="gap-2">
+              <Share2 className="h-4 w-4" />
+              Compartilhar
+            </Button>
+          </>
+        }
+      />
 
       <div className="mx-auto max-w-7xl px-4 py-8 md:px-6">
         <div className="grid gap-8 lg:grid-cols-3">
@@ -181,6 +179,8 @@ export function LugarDetalhePageClient() {
                 </div>
               </CardContent>
             </Card>
+
+            <EntityMediaSections media={spaceQuery.data?.mediaAssets} />
           </div>
 
           <div className="space-y-6">

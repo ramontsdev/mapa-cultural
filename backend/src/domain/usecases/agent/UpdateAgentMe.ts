@@ -6,6 +6,8 @@ export type UpdateAgentMeDTO = {
   publicLocation?: boolean | null;
   shortDescription?: string | null;
   longDescription?: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
 };
 
 export interface IUpdateAgentMe {

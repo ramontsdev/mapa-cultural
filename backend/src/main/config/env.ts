@@ -21,6 +21,9 @@ export const env = {
     region: process.env.AWS_REGION as string,
     accessKeyId: process.env.AWS_ACCESS_KEY_ID as string,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY as string,
+    bucketName: process.env.AWS_BUCKET_NAME as string,
+    /** Base pública dos objetos (ex.: CloudFront ou `https://bucket.s3.region.amazonaws.com`). Sem barra final. */
+    s3PublicBaseUrl: process.env.AWS_S3_PUBLIC_BASE_URL as string | undefined,
   },
 
   // Email

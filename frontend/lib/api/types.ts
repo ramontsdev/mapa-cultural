@@ -35,6 +35,30 @@ export type AppUser = {
   updatedAt: string;
 };
 
+export type MediaOwnerTypeApi =
+  | "AGENT"
+  | "SPACE"
+  | "PROJECT"
+  | "EVENT"
+  | "OPPORTUNITY";
+
+export type MediaKindApi = "IMAGE" | "VIDEO" | "DOCUMENT";
+
+export type MediaAssetDTO = {
+  id: string;
+  ownerType: MediaOwnerTypeApi;
+  ownerId: string;
+  kind: MediaKindApi;
+  url: string;
+  thumbnailUrl: string | null;
+  title: string | null;
+  caption: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  sortOrder: number;
+  createTimestamp: string;
+};
+
 export type AgentDTO = {
   id: string;
   appUserId: string | null;
@@ -44,12 +68,15 @@ export type AgentDTO = {
   geoLocation: string;
   shortDescription: string | null;
   longDescription: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   createTimestamp: string;
   updateTimestamp: string | null;
   status: number;
   userId: string;
   parentId: string | null;
   subsiteId: string | null;
+  mediaAssets?: MediaAssetDTO[];
 };
 
 export type SpaceDTO = {
@@ -58,6 +85,8 @@ export type SpaceDTO = {
   isPublic: boolean;
   shortDescription: string | null;
   longDescription: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   geoLocation: string;
   createTimestamp: string;
   updateTimestamp: string | null;
@@ -66,6 +95,7 @@ export type SpaceDTO = {
   parentId: string | null;
   subsiteId: string | null;
   status: number;
+  mediaAssets?: MediaAssetDTO[];
 };
 
 export type ProjectDTO = {
@@ -74,6 +104,8 @@ export type ProjectDTO = {
   projectType: number;
   shortDescription: string | null;
   longDescription: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   startsOn: string | null;
   endsOn: string | null;
   createTimestamp: string;
@@ -82,6 +114,7 @@ export type ProjectDTO = {
   agentId: string;
   parentId: string | null;
   subsiteId: string | null;
+  mediaAssets?: MediaAssetDTO[];
 };
 
 export type EventDTO = {
@@ -91,6 +124,8 @@ export type EventDTO = {
   shortDescription: string;
   longDescription: string | null;
   rules: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   createTimestamp: string;
   updateTimestamp: string | null;
   status: number;
@@ -98,6 +133,7 @@ export type EventDTO = {
   projectId: string | null;
   subsiteId: string | null;
   occurrences?: EventOccurrenceDTO[];
+  mediaAssets?: MediaAssetDTO[];
 };
 
 export type EventOccurrenceDTO = {
@@ -125,6 +161,8 @@ export type OpportunityDTO = {
   id: string;
   name: string;
   shortDescription: string;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
   objectType: string;
   objectId: string;
   opportunityType: number;
@@ -137,6 +175,7 @@ export type OpportunityDTO = {
   agentId: string;
   parentId: string | null;
   subsiteId: string | null;
+  mediaAssets?: MediaAssetDTO[];
 };
 
 export type RegistrationDTO = {
@@ -183,7 +222,7 @@ const TIPO_PROJETO_VALUES = new Set<TipoProjeto>(
   Object.keys(TIPO_PROJETO_LABELS) as TipoProjeto[],
 );
 
-function parseShortDescription(shortDescription: string | null | undefined) {
+export function parseShortDescription(shortDescription: string | null | undefined) {
   if (!shortDescription) return { text: "", meta: {} as Record<string, string> };
   const meta: Record<string, string> = {};
   const lines = shortDescription.split("\n");
@@ -218,6 +257,8 @@ export function mapAgentToUser(agent: AgentDTO): User {
     id: agent.id,
     nome: agent.name,
     email: meta.email ?? "",
+    avatar: agent.avatarUrl ?? undefined,
+    coverUrl: agent.coverUrl ?? undefined,
     biografia: agent.longDescription ?? text ?? "",
     oQueFaz: text || undefined,
     cidade: meta.cidade || undefined,
@@ -276,6 +317,9 @@ export function mapSpaceToLugar(space: SpaceDTO): Lugar {
     createdById: space.agentId,
     createdAt: space.createTimestamp,
     isOficial: false,
+    avatarUrl: space.avatarUrl ?? undefined,
+    coverUrl: space.coverUrl ?? undefined,
+    imagem: space.coverUrl ?? undefined,
   };
 }
 
@@ -363,7 +407,9 @@ export function mapEventToEvento(event: EventDTO): Evento {
       .split(",")
       .map((part) => part.trim())
       .filter(Boolean),
-    imagem: meta.imagem || undefined,
+    imagem: event.coverUrl ?? meta.imagem ?? undefined,
+    avatarUrl: event.avatarUrl ?? undefined,
+    coverUrl: event.coverUrl ?? undefined,
     createdById: event.agentId,
     createdAt: event.createTimestamp,
     isOficial: false,
@@ -392,6 +438,8 @@ export function mapOpportunityToOportunidade(
     isOficial: false,
     createdById: opportunity.agentId,
     createdAt: opportunity.createTimestamp,
+    avatarUrl: opportunity.avatarUrl ?? undefined,
+    coverUrl: opportunity.coverUrl ?? undefined,
   };
 }
 
@@ -416,5 +464,8 @@ export function mapProjectToProjeto(project: ProjectDTO): Projeto {
     isOficial: false,
     createdById: project.agentId,
     createdAt: project.createTimestamp,
+    imagem: project.coverUrl ?? meta.imagem ?? undefined,
+    avatarUrl: project.avatarUrl ?? undefined,
+    coverUrl: project.coverUrl ?? undefined,
   };
 }

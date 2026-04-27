@@ -27,6 +27,8 @@ export class CreateProjectController implements IController {
         name: data.name,
         shortDescription: data.shortDescription ?? null,
         longDescription: data.longDescription ?? null,
+        avatarUrl: data.avatarUrl ?? null,
+        coverUrl: data.coverUrl ?? null,
         updateTimestamp: null,
         startsOn: null,
         endsOn: null,

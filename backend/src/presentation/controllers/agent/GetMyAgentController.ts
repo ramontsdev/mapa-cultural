@@ -1,4 +1,6 @@
 import { IFindAgentByAppUserId } from '@/domain/usecases/agent/FindAgentByAppUserId';
+import { findMediaForOwner } from '@/infra/prisma/mediaOwnership';
+import { MediaOwnerType } from '@/main/db/prisma/generated/enums';
 import { notFound, ok, unauthorized } from '@/presentation/helpers/httpHelpers';
 import { IController } from '@/presentation/protocols/controller';
 import { HttpRequest, HttpResponse } from '@/presentation/protocols/http';
@@ -21,7 +23,9 @@ export class GetMyAgentController implements IController {
       return notFound({ error: 'Agente não encontrado' });
     }
 
-    return ok(agent);
+    const mediaAssets = await findMediaForOwner(MediaOwnerType.AGENT, agent.id);
+
+    return ok({ ...agent, mediaAssets });
   }
 }
 

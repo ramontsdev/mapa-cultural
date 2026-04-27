@@ -12,8 +12,10 @@ import {
   getOpportunity,
   listMyOpportunities,
   listOpportunities,
+  updateOpportunity,
   type CreateOpportunityPayload,
   type ListOpportunitiesParams,
+  type UpdateOpportunityPayload,
 } from "@/lib/api/opportunities";
 import { queryKeys } from "./query-keys";
 
@@ -60,6 +62,20 @@ export function useDeleteOpportunity() {
     mutationFn: (id: string) => deleteOpportunity(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+    },
+  });
+}
+
+export function useUpdateOpportunity(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: UpdateOpportunityPayload) =>
+      updateOpportunity(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.opportunities.all });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.opportunities.detail(id),
+      });
     },
   });
 }

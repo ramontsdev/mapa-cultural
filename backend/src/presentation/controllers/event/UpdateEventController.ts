@@ -39,6 +39,8 @@ export class UpdateEventController implements IController {
         longDescription: data.longDescription,
         rules: data.rules,
         projectId: data.projectId,
+        avatarUrl: data.avatarUrl,
+        coverUrl: data.coverUrl,
         updateTimestamp: new Date(),
       },
     });

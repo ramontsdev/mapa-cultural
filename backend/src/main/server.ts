@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { agentRoutes } from './routes/agentRoutes';
 import { authRoutes } from './routes/authRoutes';
 import { eventRoutes } from './routes/eventRoutes';
+import { mediaRoutes } from './routes/mediaRoutes';
 import { opportunityRoutes } from './routes/opportunityRoutes';
 import { projectRoutes } from './routes/projectRoutes';
 import { registrationRoutes } from './routes/registrationRoutes';
@@ -37,6 +38,7 @@ app.use('/api', [
   eventRoutes,
   opportunityRoutes,
   registrationRoutes,
+  mediaRoutes,
 ]);
 
 app.listen(env.port, () => {
