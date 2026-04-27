@@ -200,8 +200,18 @@ export default function UsuariosPage() {
                       <CardContent className="p-0">
                         <div className="flex flex-col md:flex-row">
                           <div className="flex items-center justify-center bg-muted p-6 md:w-48">
-                            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted-foreground/10">
-                              <Users className="h-12 w-12 text-muted-foreground" />
+                            <div className="relative flex h-24 w-24 shrink-0 overflow-hidden rounded-full bg-muted-foreground/10 ring-1 ring-border">
+                              {usuario.avatar ? (
+                                <img
+                                  src={usuario.avatar}
+                                  alt=""
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full w-full items-center justify-center">
+                                  <Users className="h-12 w-12 text-muted-foreground" />
+                                </div>
+                              )}
                             </div>
                           </div>
 
