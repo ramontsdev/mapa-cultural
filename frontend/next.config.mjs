@@ -6,6 +6,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  allowedDevOrigins: [
+    'localhost',
+    '127.0.0.1',
+    '10.0.3.146',
+  ],
 }
 
 export default nextConfig
