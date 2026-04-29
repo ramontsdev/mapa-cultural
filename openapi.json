@@ -1,0 +1,452 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "object-storage-ws",
+    "description": "Documentação para Object Storage",
+    "version": "0.0.2"
+  },
+  "servers": [
+    {
+      "url": "http://object-storage-ws-dev.apps.ocp.ati.pi.gov.br",
+      "description": "Generated server url"
+    }
+  ],
+  "security": [
+    {
+      "X-API-KEY": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Object Storage Controller",
+      "description": "APIs para gerenciamento de arquivos no Object Storage"
+    }
+  ],
+  "paths": {
+    "/arquivo/salvar": {
+      "put": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Salva um arquivo no caminho especificado",
+        "operationId": "salvarArquivo",
+        "parameters": [
+          {
+            "name": "nome",
+            "in": "query",
+            "description": "Nome do arquivo a ser salvo",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Nome do arquivo a ser salvo",
+              "example": "relatorio_financeiro"
+            },
+            "example": "relatorio_financeiro"
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "description": "Caminho relativo onde o arquivo será salvo",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Caminho relativo onde o arquivo será salvo",
+              "example": "orgao/api/"
+            },
+            "example": "orgao/api/"
+          },
+          {
+            "name": "retentionDias",
+            "in": "query",
+            "description": "Número de dias de retenção do arquivo",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "string",
+              "description": "Número de dias de retenção do arquivo",
+              "example": 30
+            },
+            "example": 30
+          },
+          {
+            "name": "usuario",
+            "in": "query",
+            "description": "Usuário que está enviando o arquivo",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Usuário que está enviando o arquivo",
+              "example": "admin"
+            },
+            "example": "admin"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "arquivo"
+                ],
+                "type": "object",
+                "properties": {
+                  "arquivo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Arquivo salvo com sucesso",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falha ao salvar o arquivo",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arquivo/download": {
+      "get": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Deleta um arquivo pelo caminho fornecido",
+        "operationId": "downloadArquivo",
+        "parameters": [
+          {
+            "name": "caminho",
+            "in": "query",
+            "description": "Caminho do arquivo a ser baixado",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Caminho do arquivo a ser baixado",
+              "example": "orgao/api/arquivo.pdf"
+            },
+            "example": "orgao/api/arquivo.pdf"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arquivo/buscar": {
+      "get": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Busca um arquivo pelo caminho fornecido",
+        "operationId": "buscarArquivo",
+        "parameters": [
+          {
+            "name": "caminho",
+            "in": "query",
+            "description": "Caminho completo do arquivo a ser buscado",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "etipi/orgao/api/relatorio_financeiro.pdf"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Arquivo não encontrado na nuvem",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arquivo/buscar/path": {
+      "get": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Busca os arquivos dentro do caminho fornecido",
+        "operationId": "buscarPathArquivo",
+        "parameters": [
+          {
+            "name": "caminho",
+            "in": "query",
+            "description": "Caminho base de busca",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "etipi/orgao/api/"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivos encontrados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaminhoDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Erro ao buscar",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaminhoDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arquivo/buscar/imagem": {
+      "get": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Busca uma imagem pelo caminho fornecido",
+        "operationId": "buscarByteArquivo",
+        "parameters": [
+          {
+            "name": "caminho",
+            "in": "query",
+            "description": "Caminho da imagem",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "etipi/login/login-background-3.png"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Arquivo não encontrado na nuvem",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arquivo/deletar": {
+      "delete": {
+        "tags": [
+          "Object Storage Controller"
+        ],
+        "summary": "Deleta um arquivo pelo caminho fornecido",
+        "operationId": "deletarArquivo",
+        "parameters": [
+          {
+            "name": "caminho",
+            "in": "query",
+            "description": "Caminho completo do arquivo",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "etipi/orgao/api/relatorio_financeiro.pdf"
+          },
+          {
+            "name": "usuario",
+            "in": "query",
+            "description": "Usuário responsável",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "admin"
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Provedor de armazenamento (MINIO ou AWS)",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "MINIO",
+                "AWS"
+              ],
+              "default": "MINIO"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Arquivo deletado com sucesso"
+          },
+          "404": {
+            "description": "Arquivo não encontrado na nuvem"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LinkDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "caminho": {
+            "type": "string"
+          }
+        }
+      },
+      "CaminhoDto": {
+        "type": "object",
+        "properties": {
+          "caminhos": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "X-API-KEY": {
+        "type": "apiKey",
+        "description": "Chave API necessária para acesso",
+        "name": "X-API-KEY",
+        "in": "header"
+      }
+    }
+  }
+}

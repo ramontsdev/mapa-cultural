@@ -1,6 +1,9 @@
 import { userOwnsMediaTarget } from '@/infra/prisma/mediaOwnership';
 import { prismaClient } from '@/infra/prisma/prismaClient';
-import { deleteObjectFromS3 } from '@/main/adapters/aws/s3ObjectStorage';
+import {
+  deleteMediaObject,
+  resolveAppStorageUsuario,
+} from '@/main/adapters/aws/s3ObjectStorage';
 import {
   forbidden,
   noContent,
@@ -43,7 +46,12 @@ export class DeleteMediaController implements IController {
 
     try {
       if (row.s3Key) {
-        await deleteObjectFromS3(row.s3Key);
+        const appUser = await prismaClient.user.findUnique({
+          where: { id: account.userId },
+          select: { email: true },
+        });
+        const storageUsuario = resolveAppStorageUsuario(appUser?.email, account.userId);
+        await deleteMediaObject(row.s3Key, storageUsuario);
       }
 
       await prismaClient.mediaAsset.delete({ where: { id } });

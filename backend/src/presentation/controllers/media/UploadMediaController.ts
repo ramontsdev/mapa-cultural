@@ -1,6 +1,7 @@
 import { userOwnsMediaTarget } from '@/infra/prisma/mediaOwnership';
 import { prismaClient } from '@/infra/prisma/prismaClient';
-import { env } from '@/main/config/env';
+import { resolveAppStorageUsuario } from '@/main/adapters/aws/s3ObjectStorage';
+import { mediaStorageConfigured } from '@/main/config/env';
 import { MediaKind, MediaOwnerType } from '@/main/db/prisma/generated/enums';
 import {
   badRequest,
@@ -23,9 +24,10 @@ export class UploadMediaController implements IController {
       return unauthorized({ error: 'Não autorizado' });
     }
 
-    if (!env.aws.bucketName?.trim()) {
+    if (!mediaStorageConfigured()) {
       return badRequest({
-        error: 'Bucket S3 não configurado. Defina AWS_BUCKET_NAME no .env.',
+        error:
+          'Armazenamento de mídia não configurado. Defina OBJECT_STORAGE_BASE_URL e OBJECT_STORAGE_API_KEY, ou AWS_BUCKET_NAME e credenciais S3.',
       });
     }
 
@@ -73,12 +75,19 @@ export class UploadMediaController implements IController {
         return ok(created);
       }
 
+      const appUser = await prismaClient.user.findUnique({
+        where: { id: account.userId },
+        select: { email: true },
+      });
+      const storageUsuario = resolveAppStorageUsuario(appUser?.email, account.userId);
+
       const result = await persistUploadedMedia({
         data,
         ownerType,
         kind,
         file: file!,
         nextOrder,
+        storageUsuario,
       });
 
       if (!result.ok) {

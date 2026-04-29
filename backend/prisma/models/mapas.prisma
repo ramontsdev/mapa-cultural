@@ -171,7 +171,7 @@ model EventOccurrence {
   until        DateTime? @map("until") @db.Date
   description  String?   @db.Text
   price        String?   @db.Text
-  priceInfo    String?   @map("priceInfo") @db.Text
+  priceInfo    String?   @map("priceinfo") @db.Text
   timezoneName String    @default("Etc/UTC") @map("timezone_name") @db.Text
   eventId      String    @map("event_id")
   spaceId      String    @map("space_id")

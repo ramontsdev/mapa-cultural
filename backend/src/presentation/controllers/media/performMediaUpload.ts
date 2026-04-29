@@ -1,9 +1,5 @@
 import { prismaClient } from '@/infra/prisma/prismaClient';
-import {
-  buildMediaObjectKey,
-  buildPublicObjectUrl,
-  uploadBufferToS3,
-} from '@/main/adapters/aws/s3ObjectStorage';
+import { buildMediaObjectKey, uploadMediaBuffer } from '@/main/adapters/aws/s3ObjectStorage';
 import { MediaKind, MediaOwnerType } from '@/main/db/prisma/generated/enums';
 import { validateFileForKind } from '@/presentation/helpers/uploadMediaValidation';
 import type { HttpUploadedFile } from '@/presentation/protocols/http';
@@ -15,8 +11,9 @@ export async function persistUploadedMedia(params: {
   kind: MediaKind;
   file: HttpUploadedFile;
   nextOrder: number;
+  storageUsuario: string;
 }) {
-  const { data, ownerType, kind, file, nextOrder } = params;
+  const { data, ownerType, kind, file, nextOrder, storageUsuario } = params;
   const errMsg = validateFileForKind(kind, file);
 
   if (errMsg) {
@@ -25,13 +22,13 @@ export async function persistUploadedMedia(params: {
 
   const key = buildMediaObjectKey(data.ownerType, data.ownerId, file.originalname);
 
-  await uploadBufferToS3({
+  const { publicUrl, storageKey } = await uploadMediaBuffer({
     key,
     buffer: file.buffer,
     contentType: file.mimetype,
+    originalFilename: file.originalname,
+    usuario: storageUsuario,
   });
-
-  const publicUrl = buildPublicObjectUrl(key);
 
   const created = await prismaClient.mediaAsset.create({
     data: {
@@ -44,7 +41,7 @@ export async function persistUploadedMedia(params: {
       caption: data.caption ?? null,
       fileName: file.originalname,
       mimeType: file.mimetype,
-      s3Key: key,
+      s3Key: storageKey,
       sortOrder: nextOrder,
     },
   });

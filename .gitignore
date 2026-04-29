@@ -1,1 +1,7 @@
 mapadacultura/
+
+# Dump temporário do script sync-db-from-prod.sh
+backend/.cache/
+
+# CSVs / exports manuais de produção (dados sensíveis)
+backend/scripts/backup-de-producao/
