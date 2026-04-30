@@ -8,6 +8,32 @@ export type LinkDto = {
   caminho?: string;
 };
 
+/** Resposta GET `/arquivo/buscar/path` (OpenAPI: `CaminhoDto`). */
+export type CaminhoDto = {
+  caminhos?: string[];
+};
+
+function buscarPathDebugEnabled(): boolean {
+  return process.env.OBJECT_STORAGE_BUSCAR_DEBUG?.trim() === 'true';
+}
+
+function extractCaminhosFromBuscarPathJson(text: string): string[] {
+  if (!text?.trim()) return [];
+
+  try {
+    const j = JSON.parse(text) as Record<string, unknown>;
+    const raw = j.caminhos ?? j.Caminhos;
+
+    if (Array.isArray(raw)) {
+      return raw.filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+    }
+  } catch {
+    /* ignore */
+  }
+
+  return [];
+}
+
 function objectStorageOrigin(): string {
   const base = env.objectStorage.baseUrl;
 
@@ -158,6 +184,51 @@ export async function salvarArquivoWs(params: {
   }
 
   return body;
+}
+
+/**
+ * GET `/arquivo/buscar/path` — lista caminhos completos de objetos sob o prefixo `caminho`.
+ */
+export async function buscarArquivosPorPathWs(caminhoPrefix: string): Promise<string[]> {
+  const u = new URL(`${objectStorageOrigin()}/arquivo/buscar/path`);
+
+  u.searchParams.set('caminho', caminhoPrefix);
+  u.searchParams.set('provider', env.objectStorage.provider);
+
+  const res = await fetchWithStorageContext(
+    u.toString(),
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json', ...apiKeyHeader() },
+    },
+    'object-storage-ws buscar/path (rede/TLS)',
+  );
+
+  const text = await res.text();
+
+  if (buscarPathDebugEnabled()) {
+    console.error(
+      `[object-storage-ws buscar/path] HTTP ${res.status} caminho=${JSON.stringify(caminhoPrefix)} body_len=${text.length}`,
+    );
+
+    if (text.length > 0 && text.length < 4000) {
+      console.error(`[object-storage-ws buscar/path] body=${text.slice(0, 2000)}`);
+    }
+  }
+
+  const caminhos = extractCaminhosFromBuscarPathJson(text);
+
+  if (res.status === 404) {
+    return caminhos;
+  }
+
+  if (!res.ok) {
+    const detail = text ? text.slice(0, 400) : res.statusText;
+
+    throw new Error(`object-storage-ws buscar/path: HTTP ${res.status} — ${detail}`);
+  }
+
+  return caminhos;
 }
 
 /**

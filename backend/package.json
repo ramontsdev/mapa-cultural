@@ -19,6 +19,8 @@
     "seed": "tsx -r tsconfig-paths/register --env-file .env ./scripts/seed.ts",
     "etl-mapas-prod-to-local": "tsx --env-file .env scripts/etl-mapas-prod-to-local.ts",
     "import-backup-de-producao": "tsx -r tsconfig-paths/register --env-file .env scripts/import-backup-de-producao.ts",
+    "audit-agent-files-in-backup": "tsx -r tsconfig-paths/register --env-file .env scripts/audit-agent-files-in-backup.ts",
+    "delete-storage-by-path": "tsx -r tsconfig-paths/register --env-file .env scripts/delete-storage-by-path.ts",
     "migrate:mapas-prod-to-local-completo": "pnpm prisma migrate deploy --schema=./prisma && pnpm etl-mapas-prod-to-local && pnpm import-backup-de-producao",
     "typecheck": "tsc --noEmit",
     "lint:fix": "npm run lint -- --fix",

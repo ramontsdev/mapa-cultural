@@ -253,17 +253,28 @@ export function formatMetadata(
 export function mapAgentToUser(agent: AgentDTO): User {
   const { text, meta } = parseShortDescription(agent.shortDescription);
   const tipoAtuacao = meta.tipoAtuacao === "coletivo" ? "coletivo" : "individual";
+  const email =
+    meta.email?.trim() ||
+    meta.emailPublico?.trim() ||
+    meta.emailPrivado?.trim() ||
+    "";
+  const telefone =
+    meta.telefone?.trim() ||
+    meta.telefone1?.trim() ||
+    meta.telefonePublico?.trim() ||
+    undefined;
+
   return {
     id: agent.id,
     nome: agent.name,
-    email: meta.email ?? "",
+    email,
     avatar: agent.avatarUrl ?? undefined,
     coverUrl: agent.coverUrl ?? undefined,
     biografia: agent.longDescription ?? text ?? "",
     oQueFaz: text || undefined,
     cidade: meta.cidade || undefined,
     estado: meta.estado || undefined,
-    telefone: meta.telefone || undefined,
+    telefone,
     website: meta.website || undefined,
     redesSociais: {
       instagram: meta.instagram,
@@ -348,6 +359,22 @@ function pickPrimaryOccurrence(
   return latestPast.occ;
 }
 
+/** Primeira ocorrência com início válido (quando a escolha “primária” veio sem data). */
+function firstOccurrenceWithValidStart(
+  occurrences: EventOccurrenceDTO[] | undefined,
+): EventOccurrenceDTO | null {
+  if (!occurrences?.length) return null;
+  const dated = occurrences
+    .map((occ) => {
+      const raw = occ.startsAt ?? occ.startsOn;
+      const ms = raw ? new Date(raw).getTime() : Number.NaN;
+      return { occ, ms };
+    })
+    .filter((x) => !Number.isNaN(x.ms))
+    .sort((a, b) => a.ms - b.ms);
+  return dated[0]?.occ ?? null;
+}
+
 function extractOccurrenceInfo(
   occurrence: EventOccurrenceDTO | null,
 ): { dataInicio: string; dataFim?: string; horario: string } {
@@ -385,8 +412,15 @@ export function mapEventToEvento(event: EventDTO): Evento {
     ? classificacaoCandidate
     : "livre";
 
-  const occurrence = pickPrimaryOccurrence(event.occurrences);
-  const occurrenceInfo = extractOccurrenceInfo(occurrence);
+  let occurrence = pickPrimaryOccurrence(event.occurrences);
+  let occurrenceInfo = extractOccurrenceInfo(occurrence);
+  if (!occurrenceInfo.dataInicio) {
+    const withDate = firstOccurrenceWithValidStart(event.occurrences);
+    if (withDate) {
+      occurrence = withDate;
+      occurrenceInfo = extractOccurrenceInfo(withDate);
+    }
+  }
   const occurrenceSpace = occurrence?.space ?? null;
   const lugar = occurrenceSpace ? mapSpaceToLugar(occurrenceSpace) : undefined;
 

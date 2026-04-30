@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 
 import { QueryState } from "@/components/api/QueryState";
 import { useAuth } from "@/components/auth-provider";
@@ -54,6 +54,116 @@ const FILTER_TODOS = "__todos__";
 
 type SortOportunidades = "recentes" | "antigos" | "nome" | "nome-desc" | "encerramento";
 
+type OportunidadesFiltersPanelProps = {
+  statusFilter: string[];
+  setStatusFilter: React.Dispatch<React.SetStateAction<string[]>>;
+  showOnlyOficiais: boolean;
+  setShowOnlyOficiais: (value: boolean) => void;
+  tipoFilter: string;
+  setTipoFilter: (value: string) => void;
+  areaFilter: string;
+  setAreaFilter: (value: string) => void;
+  onClearFilters: () => void;
+};
+
+/** Fora do page client: evita novo tipo de componente a cada render (remount em cascata). */
+function OportunidadesFiltersPanel({
+  statusFilter,
+  setStatusFilter,
+  showOnlyOficiais,
+  setShowOnlyOficiais,
+  tipoFilter,
+  setTipoFilter,
+  areaFilter,
+  setAreaFilter,
+  onClearFilters,
+}: OportunidadesFiltersPanelProps) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="mb-3 font-semibold text-primary">Status das oportunidades</h3>
+        <div className="space-y-2">
+          {[
+            { value: "aberta", label: "Inscrições abertas" },
+            { value: "encerrada", label: "Inscrições encerradas" },
+            { value: "futura", label: "Inscrições futuras" },
+          ].map((status) => (
+            <div key={status.value} className="flex items-center space-x-2">
+              <Checkbox
+                id={`status-${status.value}`}
+                checked={statusFilter.includes(status.value)}
+                onCheckedChange={(checked) => {
+                  if (checked) {
+                    setStatusFilter([...statusFilter, status.value]);
+                  } else {
+                    setStatusFilter(statusFilter.filter((s) => s !== status.value));
+                  }
+                }}
+              />
+              <label
+                htmlFor={`status-${status.value}`}
+                className="text-sm text-muted-foreground"
+              >
+                {status.label}
+              </label>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center space-x-2">
+        <Checkbox
+          id="oficiais"
+          checked={showOnlyOficiais}
+          onCheckedChange={(checked) => setShowOnlyOficiais(checked as boolean)}
+        />
+        <label htmlFor="oficiais" className="text-sm text-muted-foreground">
+          Editais oficiais
+        </label>
+        <BadgeCheck className="h-4 w-4 text-primary" />
+      </div>
+
+      <div>
+        <h3 className="mb-3 font-semibold text-primary">Tipo de oportunidade</h3>
+        <Select value={tipoFilter} onValueChange={setTipoFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione os tipos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FILTER_TODOS}>Todos os tipos</SelectItem>
+            {Object.entries(TIPO_OPORTUNIDADE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        <h3 className="mb-3 font-semibold text-primary">Área de interesse</h3>
+        <Select value={areaFilter} onValueChange={setAreaFilter}>
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione as áreas de interesse" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={FILTER_TODOS}>Todas as áreas</SelectItem>
+            {Object.entries(AREA_ATUACAO_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Button variant="outline" onClick={onClearFilters} className="w-full">
+        Limpar todos os filtros
+      </Button>
+    </div>
+  );
+}
+
 function statusFrom(o: Oportunidade): "aberta" | "futura" | "encerrada" {
   const now = Date.now();
   const from = new Date(o.dataInscricaoInicio).getTime();
@@ -83,8 +193,9 @@ export default function OportunidadesPage() {
     }
   }, [isAuthenticated, router]);
 
+  const deferredSearch = useDeferredValue(searchQuery.trim());
   const oppsQuery = useOpportunities({
-    q: searchQuery.trim() || undefined,
+    q: deferredSearch || undefined,
     pageSize: 50,
   });
 
@@ -182,92 +293,17 @@ export default function OportunidadesPage() {
     });
   };
 
-  const FiltersContent = () => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="mb-3 font-semibold text-primary">Status das oportunidades</h3>
-        <div className="space-y-2">
-          {[
-            { value: "aberta", label: "Inscrições abertas" },
-            { value: "encerrada", label: "Inscrições encerradas" },
-            { value: "futura", label: "Inscrições futuras" },
-          ].map((status) => (
-            <div key={status.value} className="flex items-center space-x-2">
-              <Checkbox
-                id={`status-${status.value}`}
-                checked={statusFilter.includes(status.value)}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setStatusFilter([...statusFilter, status.value]);
-                  } else {
-                    setStatusFilter(
-                      statusFilter.filter((s) => s !== status.value),
-                    );
-                  }
-                }}
-              />
-              <label
-                htmlFor={`status-${status.value}`}
-                className="text-sm text-muted-foreground"
-              >
-                {status.label}
-              </label>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id="oficiais"
-          checked={showOnlyOficiais}
-          onCheckedChange={(checked) => setShowOnlyOficiais(checked as boolean)}
-        />
-        <label htmlFor="oficiais" className="text-sm text-muted-foreground">
-          Editais oficiais
-        </label>
-        <BadgeCheck className="h-4 w-4 text-primary" />
-      </div>
-
-      <div>
-        <h3 className="mb-3 font-semibold text-primary">Tipo de oportunidade</h3>
-        <Select value={tipoFilter} onValueChange={setTipoFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione os tipos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={FILTER_TODOS}>Todos os tipos</SelectItem>
-            {Object.entries(TIPO_OPORTUNIDADE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div>
-        <h3 className="mb-3 font-semibold text-primary">Área de interesse</h3>
-        <Select value={areaFilter} onValueChange={setAreaFilter}>
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione as áreas de interesse" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={FILTER_TODOS}>Todas as áreas</SelectItem>
-            {Object.entries(AREA_ATUACAO_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <Button variant="outline" onClick={clearFilters} className="w-full">
-        Limpar todos os filtros
-      </Button>
-    </div>
-  );
+  const filterPanelProps: OportunidadesFiltersPanelProps = {
+    statusFilter,
+    setStatusFilter,
+    showOnlyOficiais,
+    setShowOnlyOficiais,
+    tipoFilter,
+    setTipoFilter,
+    areaFilter,
+    setAreaFilter,
+    onClearFilters: clearFilters,
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -360,7 +396,7 @@ export default function OportunidadesPage() {
                 <SheetTitle>Filtros de oportunidades</SheetTitle>
               </SheetHeader>
               <div className="mt-6">
-                <FiltersContent />
+                <OportunidadesFiltersPanel {...filterPanelProps} />
               </div>
             </SheetContent>
           </Sheet>
@@ -486,7 +522,7 @@ export default function OportunidadesPage() {
                 <h2 className="mb-6 text-lg font-semibold text-primary">
                   Filtros de oportunidades
                 </h2>
-                <FiltersContent />
+                <OportunidadesFiltersPanel {...filterPanelProps} />
               </CardContent>
             </Card>
           </aside>

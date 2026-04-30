@@ -24,9 +24,22 @@
  *
  * - IMPORT_MEDIA_DRY_RUN=true — apenas lista o que faria (sem upload / sem insert)
  * - IMPORT_MEDIA_LIMIT — opcional; número máximo de linhas `file` processadas
+ * - IMPORT_MEDIA_MAX_BYTES — opcional; não envia ficheiros acima deste tamanho (evita HTTP 500
+ *   "Maximum upload size exceeded" no object-storage-ws); conta como skip, não como falha.
+ * - IMPORT_MEDIA_FETCH_BASE_URL — opcional; URL base onde o path da tabela `file` é servido via HTTP
+ *   (ex.: https://mapadacultura.pi.gov.br/files). Se o ficheiro não existir em disco, tenta GET e grava em
+ *   PUBLIC_FILES_ROOT antes do upload (útil quando o backup em pasta está incompleto).
+ * - IMPORT_MEDIA_FILTER_LEGACY_AGENT_ID — opcional; só processa linhas `file` desse agente legado (object_id),
+ *   com object_type Agent (para testes rápidos).
  *
- * Idempotência: tabela `_media_import_state` (legacy_file_id → media_asset.id).
+ * Idempotência: `_media_import_state` (legacy_file_id → media_asset.id). Se `media_asset` tiver sido
+ * apagado mas o estado não, a entrada órfã é removida e o file volta a ser importado.
  *
+ * Após importar ficheiros, o script alinha `avatar_url` e `cover_url` nas tabelas de entidades
+ * a partir de `file.grp` no Mapas legado (`avatar` / `profile` → perfil; `header` / `cover` / `capa` → capa).
+ * O ETL (`etl-mapas-prod-to-local`) deixa essas colunas a NULL; sem este passo o hero da UI fica só com placeholders.
+ * A galeria continua a ser a lista de `media_asset` (ex.: `grp = gallery`): tem de existir ficheiro no backup
+ * e o upload ter corrido com sucesso para cada linha `file`.
  * Erros por linha (storage, DB): o script continua e só encerra com código 1 se houver
  * falhas (após corrigir IAM/API/rede, rerode o mesmo comando).
  */
@@ -90,6 +103,114 @@ function ownerTypeFromLegacy(objectType: string): MediaOwnerType | null {
   return null;
 }
 
+/**
+ * Mapas Culturais (`file.grp`): `avatar` = foto de perfil; `header` = imagem de capa no perfil.
+ * @see https://github.com/mapasculturais/mapasculturais/blob/develop/src/core/Entities/File.php
+ */
+function legacyImageGroupRole(grp: string | null | undefined): 'avatar' | 'cover' | null {
+  const g = (grp ?? '').trim().toLowerCase();
+
+  if (!g) return null;
+
+  if (g === 'avatar' || g === 'profile' || g.startsWith('img:avatar')) return 'avatar';
+
+  if (
+    g === 'header' ||
+    g === 'cover' ||
+    g === 'capa' ||
+    g === 'banner' ||
+    g.startsWith('img:header')
+  ) {
+    return 'cover';
+  }
+
+  return null;
+}
+
+/** Preenche `avatar_url` / `cover_url` nas entidades com a URL pública já gravada em `media_asset`. */
+async function resyncProfileAndCoverFromLegacyFileGroups(
+  source: Client,
+  target: Client,
+): Promise<void> {
+  const { rows: links } = await target.query<{
+    legacy_file_id: number;
+    url: string;
+    kind: string;
+    owner_type: string;
+    owner_id: string;
+  }>(`
+    SELECT s.legacy_file_id, ma.url, ma.kind::text AS kind, ma.owner_type::text AS owner_type, ma.owner_id
+    FROM _media_import_state s
+    INNER JOIN media_asset ma ON ma.id = s.media_asset_id
+    ORDER BY s.legacy_file_id ASC
+  `);
+
+  if (links.length === 0) return;
+
+  const legacyIds = [...new Set(links.map((l) => l.legacy_file_id))];
+  const { rows: fileRows } = await source.query<{ id: number; grp: string | null }>(
+    `SELECT id, grp FROM file WHERE id = ANY($1::int[])`,
+    [legacyIds],
+  );
+  const grpByLegacyId = new Map<number, string | null>(fileRows.map((f) => [f.id, f.grp]));
+
+  let nAvatar = 0;
+  let nCover = 0;
+
+  for (const row of links) {
+    if (row.kind !== 'IMAGE') continue;
+
+    const role = legacyImageGroupRole(grpByLegacyId.get(row.legacy_file_id) ?? null);
+
+    if (!role) continue;
+
+    const col = role === 'avatar' ? 'avatar_url' : 'cover_url';
+    const ot = row.owner_type.trim();
+
+    let update: { rowCount: number | null };
+
+    if (ot === 'AGENT') {
+      update = await target.query(
+        `UPDATE agent SET ${col} = $1 WHERE id = $2 AND ${col} IS NULL`,
+        [row.url, row.owner_id],
+      );
+    } else if (ot === 'SPACE') {
+      update = await target.query(
+        `UPDATE space SET ${col} = $1 WHERE id = $2 AND ${col} IS NULL`,
+        [row.url, row.owner_id],
+      );
+    } else if (ot === 'EVENT') {
+      update = await target.query(
+        `UPDATE event SET ${col} = $1 WHERE id = $2 AND ${col} IS NULL`,
+        [row.url, row.owner_id],
+      );
+    } else if (ot === 'PROJECT') {
+      update = await target.query(
+        `UPDATE project SET ${col} = $1 WHERE id = $2 AND ${col} IS NULL`,
+        [row.url, row.owner_id],
+      );
+    } else if (ot === 'OPPORTUNITY') {
+      update = await target.query(
+        `UPDATE opportunity SET ${col} = $1 WHERE id = $2 AND ${col} IS NULL`,
+        [row.url, row.owner_id],
+      );
+    } else {
+      continue;
+    }
+
+    if ((update.rowCount ?? 0) > 0) {
+      if (role === 'avatar') nAvatar += 1;
+      else nCover += 1;
+    }
+  }
+
+  if (nAvatar > 0 || nCover > 0) {
+    console.info(
+      `[perfil] avatar_url/cover_url via file.grp (Mapas): +${nAvatar} perfis, +${nCover} capas`,
+    );
+  }
+}
+
 function resolveDiskPath(root: string, dbPath: string): string {
   const trimmed = dbPath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
   const joined = path.resolve(root, trimmed);
@@ -101,6 +222,38 @@ function resolveDiskPath(root: string, dbPath: string): string {
 
 async function readFileBuffer(absPath: string): Promise<Buffer> {
   return fs.readFile(absPath);
+}
+
+/** Tenta obter o ficheiro por HTTP quando não existe em `PUBLIC_FILES_ROOT` (ex.: backup incompleto, ficheiros ainda servidos pelo Mapas em `/files/`). */
+async function tryFetchMissingFileToDisk(
+  fetchBaseUrl: string,
+  relativePath: string,
+  absPath: string,
+): Promise<boolean> {
+  const base = fetchBaseUrl.replace(/\/+$/, '');
+  const rel = relativePath.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+  const url = `${base}/${rel}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { redirect: 'follow' });
+  } catch {
+    return false;
+  }
+
+  if (!res.ok) {
+    return false;
+  }
+
+  const arrayBuf = await res.arrayBuffer();
+  const buf = Buffer.from(arrayBuf);
+  if (buf.length === 0) {
+    return false;
+  }
+
+  await fs.mkdir(path.dirname(absPath), { recursive: true });
+  await fs.writeFile(absPath, buf);
+  return true;
 }
 
 async function assertLegacyFileTableExists(client: Client): Promise<void> {
@@ -244,6 +397,32 @@ async function main() {
   await target.connect();
   await ensureStateTable(target);
 
+  const maxBytesRaw = process.env.IMPORT_MEDIA_MAX_BYTES?.trim();
+  const maxBytes =
+    maxBytesRaw && maxBytesRaw !== '' && !Number.isNaN(Number.parseInt(maxBytesRaw, 10))
+      ? Number.parseInt(maxBytesRaw, 10)
+      : null;
+
+  const { rows: orphanPre } = await target.query<{ c: string }>(`
+    SELECT COUNT(*)::text AS c
+    FROM _media_import_state s
+    LEFT JOIN media_asset m ON m.id = s.media_asset_id
+    WHERE m.id IS NULL
+  `);
+  const orphanPreCount = Number.parseInt(orphanPre[0]?.c ?? '0', 10);
+  if (orphanPreCount > 0) {
+    console.warn(
+      `Atenção: ${orphanPreCount} linha(s) em _media_import_state sem linha em media_asset (órfãs). ` +
+        'Causa típica: TRUNCATE ou DELETE em media_asset sem limpar o estado. ' +
+        'Durante esta execução, cada file correspondente volta a ser importado após remover a entrada órfã.',
+    );
+  }
+  if (maxBytes != null && maxBytes > 0) {
+    console.info(
+      `Limite de tamanho: IMPORT_MEDIA_MAX_BYTES=${maxBytes} — ficheiros maiores são ignorados (skip).`,
+    );
+  }
+
   console.info('--- Import mídia (só tabela `file` → storage + `media_asset` no destino) ---');
   console.info(`Origem (leitura "file"): ${summarizePgUrl(sourceUrl)}`);
   console.info(`Destino (DATABASE_URL):   ${summarizePgUrl(databaseUrl)} — gravações: media_asset, _media_import_state`);
@@ -258,6 +437,29 @@ async function main() {
   }
   await assertLegacyFileTableExists(source);
 
+  const filterAgentRaw = process.env.IMPORT_MEDIA_FILTER_LEGACY_AGENT_ID?.trim();
+  const filterLegacyAgentId =
+    filterAgentRaw && filterAgentRaw !== '' && !Number.isNaN(Number.parseInt(filterAgentRaw, 10))
+      ? Number.parseInt(filterAgentRaw, 10)
+      : null;
+  if (filterLegacyAgentId != null) {
+    console.info(
+      `Filtro: IMPORT_MEDIA_FILTER_LEGACY_AGENT_ID=${filterLegacyAgentId} — só ficheiros Agent com esse object_id.\n`,
+    );
+  }
+
+  const fetchBaseUrl = process.env.IMPORT_MEDIA_FETCH_BASE_URL?.trim() ?? '';
+  if (fetchBaseUrl) {
+    console.info(
+      `HTTP fallback: IMPORT_MEDIA_FETCH_BASE_URL — ficheiros em falta no disco serão pedidos por GET.\n`,
+    );
+  }
+
+  const agentFileWhere =
+    filterLegacyAgentId != null
+      ? `WHERE f.object_type::text LIKE '%Agent%' AND f.object_id = ${filterLegacyAgentId}`
+      : '';
+
   const fileQuery =
     limit != null && !Number.isNaN(limit)
       ? `
@@ -265,6 +467,7 @@ async function main() {
       SELECT f.*,
         ROW_NUMBER() OVER (PARTITION BY object_type, object_id ORDER BY id) - 1 AS sort_order
       FROM file f
+      ${agentFileWhere}
     )
     SELECT id, path, name, mime_type, description, object_type::text AS object_type,
            object_id, create_timestamp, grp, sort_order
@@ -277,6 +480,7 @@ async function main() {
       SELECT f.*,
         ROW_NUMBER() OVER (PARTITION BY object_type, object_id ORDER BY id) - 1 AS sort_order
       FROM file f
+      ${agentFileWhere}
     )
     SELECT id, path, name, mime_type, description, object_type::text AS object_type,
            object_id, create_timestamp, grp, sort_order
@@ -301,6 +505,9 @@ async function main() {
   let missingOwner = 0;
   let missingFile = 0;
   let dup = 0;
+  let skippedMaxBytes = 0;
+  let stateOrphanRemoved = 0;
+  let fetchedFromHttp = 0;
   let uploadOrDbErrors = 0;
   let loggedStorageHint = false;
   let bytesImportadosOk = 0;
@@ -323,13 +530,26 @@ async function main() {
       continue;
     }
 
-    const already = await target.query(
-      `SELECT 1 FROM _media_import_state WHERE legacy_file_id = $1`,
+    const stateRow = await target.query<{ media_asset_id: string; has_asset: boolean | null }>(
+      `
+      SELECT s.media_asset_id, (m.id IS NOT NULL) AS has_asset
+      FROM _media_import_state s
+      LEFT JOIN media_asset m ON m.id = s.media_asset_id
+      WHERE s.legacy_file_id = $1
+      `,
       [row.id],
     );
-    if (already.rows.length > 0) {
-      dup++;
-      continue;
+    if (stateRow.rows.length > 0) {
+      const { media_asset_id: mid, has_asset: hasAsset } = stateRow.rows[0];
+      if (hasAsset) {
+        dup++;
+        continue;
+      }
+      await target.query(`DELETE FROM _media_import_state WHERE legacy_file_id = $1`, [row.id]);
+      stateOrphanRemoved++;
+      console.warn(
+        `[state-órfão] file=${row.id}: removida entrada _media_import_state (media_asset ${mid} inexistente) — nova tentativa de importação`,
+      );
     }
 
     let absPath: string;
@@ -341,10 +561,29 @@ async function main() {
       continue;
     }
 
-    const stat = await fs.stat(absPath).catch(() => null);
+    let stat = await fs.stat(absPath).catch(() => null);
+    if (!stat?.isFile() && fetchBaseUrl) {
+      const rel = row.path.replace(/^[/\\]+/, '').replace(/\\/g, '/');
+      const okFetch = await tryFetchMissingFileToDisk(fetchBaseUrl, rel, absPath);
+      if (okFetch) {
+        fetchedFromHttp++;
+        console.info(`[fetch] file=${row.id} ok path=${rel}`);
+        stat = await fs.stat(absPath).catch(() => null);
+      }
+    }
     if (!stat?.isFile()) {
       missingFile++;
       console.warn(`[missing] file=${row.id} path=${absPath}`);
+      continue;
+    }
+
+    if (maxBytes != null && maxBytes > 0 && stat.size > maxBytes) {
+      skippedMaxBytes++;
+      if (skippedMaxBytes <= 5 || skippedMaxBytes % 50 === 0) {
+        console.warn(
+          `[skip-tamanho] file=${row.id} bytes=${stat.size} limite=${maxBytes} path=${absPath}`,
+        );
+      }
       continue;
     }
 
@@ -438,18 +677,42 @@ async function main() {
   const importStateTotal = await target
     .query<{ c: string }>(`SELECT COUNT(*)::text AS c FROM _media_import_state`)
     .then((r) => r.rows[0]?.c ?? '?');
+  const orphanPostCount = await target
+    .query<{ c: string }>(`
+      SELECT COUNT(*)::text AS c
+      FROM _media_import_state s
+      LEFT JOIN media_asset m ON m.id = s.media_asset_id
+      WHERE m.id IS NULL
+    `)
+    .then((r) => Number.parseInt(r.rows[0]?.c ?? '0', 10));
+
+  if (!dryRun) {
+    try {
+      await resyncProfileAndCoverFromLegacyFileGroups(source, target);
+    } catch (e) {
+      console.warn('[perfil] sincronização avatar/capa:', summarizeErr(e));
+    }
+  }
 
   await source.end();
   await target.end();
 
   console.info('---');
   const gb = bytesToGbString(bytesImportadosOk);
+  const extraParts: string[] = [];
+  if (stateOrphanRemoved > 0) extraParts.push(`estado_órfão_removido=${stateOrphanRemoved}`);
+  if (skippedMaxBytes > 0) extraParts.push(`skip_tamanho=${skippedMaxBytes}`);
+  if (fetchedFromHttp > 0) extraParts.push(`fetch_http=${fetchedFromHttp}`);
+  const extra = extraParts.length > 0 ? ` ${extraParts.join(' ')}` : '';
+
   console.info(
     `Importação concluída: ok=${ok} (~${gb} GB) já_importados=${dup} sem_owner=${missingOwner} arquivo_ausente=${missingFile}` +
+      extra +
       `${!dryRun && uploadOrDbErrors > 0 ? ` falhas_storage_db=${uploadOrDbErrors}` : ''}${dryRun ? ' (dry-run)' : ''}`,
   );
   console.info(
-    `Destino ${summarizePgUrl(databaseUrl)} — total media_asset=${mediaAssetTotal}, linhas _media_import_state=${importStateTotal}`,
+    `Destino ${summarizePgUrl(databaseUrl)} — total media_asset=${mediaAssetTotal}, linhas _media_import_state=${importStateTotal}` +
+      `${orphanPostCount > 0 ? `, estado_órfão_restante=${orphanPostCount} (file legado ausente?)` : ''}`,
   );
 
   if (!dryRun && uploadOrDbErrors > 0) {

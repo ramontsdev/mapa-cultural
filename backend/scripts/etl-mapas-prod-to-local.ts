@@ -6,7 +6,11 @@
  * - SOURCE_DATABASE_URL — Postgres de produção / staging legado (leitura)
  * - DATABASE_URL — banco local alvo (escrita), após `pnpm prisma:migrate`
  * - ETL_DEFAULT_USER_PASSWORD — senha inicial bcrypt para todos os `users` criados (padrão seguro só dev)
+ * - ETL_SKIP_DRAFT_EVENTS — se `true`, não migra eventos cujo `status` não está em ETL_MAPAS_PUBLISHED_STATUS (padrão: `1`, publicado no Mapas).
+ * - ETL_MAPAS_PUBLISHED_STATUS — lista separada por vírgula de valores `status` considerados publicados (ex.: `1` ou `1,2`).
  *
+ * Metadados Doctrine (`agent_meta`, `event_meta`): email público, telefone, redes e alguns campos de evento
+ * são fundidos em `short_description` no formato `[chave]: valor` esperado pelo frontend.
  * Ordem sugerida: 1) este script 2) `pnpm import-backup-de-producao`
  *
  * O mapeamento de IDs segue `scripts/lib/mapasLegacyIds.ts` (UUID v5 local).
@@ -21,6 +25,11 @@ import {
   legacyIds,
   mediaOwnerUuidFromLegacyObject,
 } from './lib/mapasLegacyIds';
+import {
+  loadMetaByOwner,
+  mergeAgentMetaIntoShortDescription,
+  mergeEventMetaIntoShortDescription,
+} from './lib/mapasMetaMerge';
 
 const SOURCE = process.env.SOURCE_DATABASE_URL;
 const TARGET = process.env.DATABASE_URL;
@@ -135,6 +144,23 @@ async function main() {
   await source.connect();
   await target.connect();
 
+  const agentMetaByOwner = await loadMetaByOwner(source, 'agent_meta');
+  const eventMetaByOwner = await loadMetaByOwner(source, 'event_meta');
+
+  const skipDraftEvents = process.env.ETL_SKIP_DRAFT_EVENTS === 'true';
+  const publishedStatuses = new Set(
+    (process.env.ETL_MAPAS_PUBLISHED_STATUS ?? '1')
+      .split(',')
+      .map((s) => Number(s.trim()))
+      .filter((n) => !Number.isNaN(n)),
+  );
+
+  if (skipDraftEvents) {
+    console.info(
+      `ETL_SKIP_DRAFT_EVENTS: eventos com status fora de [${[...publishedStatuses].join(', ')}] serão omitidos (e suas ocorrências).\n`,
+    );
+  }
+
   console.info('Truncando tabelas Mapas + auth local no alvo…');
   await target.query(`
     TRUNCATE TABLE
@@ -232,6 +258,11 @@ async function main() {
         : '(0,0)';
     const geo = row.geo_wkt ? String(row.geo_wkt) : '';
 
+    const mergedShort = mergeAgentMetaIntoShortDescription(
+      String(row.short_description ?? ''),
+      agentMetaByOwner.get(row.id),
+    );
+
     await target.query(
       `INSERT INTO agent (
         id, type, name, public_location, location, _geo_location,
@@ -249,7 +280,7 @@ async function main() {
         row.public_location,
         loc,
         geo,
-        row.short_description,
+        mergedShort,
         row.long_description,
         row.create_timestamp,
         row.status,
@@ -383,14 +414,28 @@ async function main() {
   }
   console.info(`project: ${pj.rows.length} linhas`);
 
+  const migratedLegacyEventIds = new Set<number>();
+  let eventsSkippedDraft = 0;
+
   const ev = await source.query(`SELECT * FROM event ORDER BY id`);
   for (const row of ev.rows) {
+    if (skipDraftEvents && !publishedStatuses.has(Number(row.status))) {
+      eventsSkippedDraft += 1;
+      continue;
+    }
+
+    migratedLegacyEventIds.add(row.id);
+
     const id = legacyIds.event(row.id);
     const agentId = legacyIds.agent(row.agent_id);
     const projectId =
       row.project_id != null ? legacyIds.project(row.project_id) : null;
     const subsiteId =
       row.subsite_id != null ? legacyIds.subsite(row.subsite_id) : null;
+    const shortDesc = mergeEventMetaIntoShortDescription(
+      String(row.short_description ?? ''),
+      eventMetaByOwner.get(row.id),
+    );
 
     await target.query(
       `INSERT INTO event (
@@ -401,7 +446,7 @@ async function main() {
         id,
         row.type,
         row.name,
-        row.short_description ?? '',
+        shortDesc,
         row.long_description,
         row.rules,
         row.create_timestamp,
@@ -413,10 +458,21 @@ async function main() {
       ],
     );
   }
-  console.info(`event: ${ev.rows.length} linhas`);
+  console.info(`event: ${migratedLegacyEventIds.size} linhas`);
+  if (skipDraftEvents && eventsSkippedDraft > 0) {
+    console.info(
+      `event: ${eventsSkippedDraft} omitidos (rascunho / não publicados na origem).`,
+    );
+  }
 
+  let occurrencesSkippedOrphans = 0;
   const eo = await source.query(`SELECT * FROM event_occurrence ORDER BY id`);
   for (const row of eo.rows) {
+    if (!migratedLegacyEventIds.has(row.event_id)) {
+      occurrencesSkippedOrphans += 1;
+      continue;
+    }
+
     const id = legacyIds.eventOccurrence(row.id);
     const eventId = legacyIds.event(row.event_id);
     const spaceId = legacyIds.space(row.space_id);
@@ -447,11 +503,17 @@ async function main() {
       ],
     );
   }
-  console.info(`event_occurrence: ${eo.rows.length} linhas`);
+  const eventOccurrencesInserted = eo.rows.length - occurrencesSkippedOrphans;
+  console.info(`event_occurrence: ${eventOccurrencesInserted} linhas`);
+  if (occurrencesSkippedOrphans > 0) {
+    console.info(
+      `event_occurrence: ${occurrencesSkippedOrphans} omitidas (evento pai não migrado ou rascunho filtrado).`,
+    );
+  }
 
   const op = await source.query(
     `SELECT id, parent_id, agent_id, type, name, short_description,
-            long_description, registration_from, registration_to, published_registrations,
+            registration_from, registration_to, published_registrations,
             registration_categories, create_timestamp, update_timestamp, status, subsite_id, object_type, object_id,
             publish_timestamp, auto_publish, registration_proponent_types, registration_ranges
      FROM opportunity ORDER BY id`,
@@ -476,14 +538,14 @@ async function main() {
 
     await target.query(
       `INSERT INTO opportunity (
-        id, object_type, object_id, type, name, short_description, long_description,
+        id, object_type, object_id, type, name, short_description,
         avatar_url, cover_url, registration_from, registration_to, published_registrations,
         registration_categories, create_timestamp, update_timestamp, publish_timestamp, auto_publish, status,
         registration_proponent_types, registration_ranges, parent_id, agent_id, subsite_id
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7, NULL, NULL, $8,$9,$10,
-        $11::jsonb,$12,$13,$14,$15,$16,
-        $17::jsonb,$18::jsonb,$19,$20,$21
+        $1,$2,$3,$4,$5,$6, NULL, NULL, $7,$8,$9,
+        $10::jsonb,$11,$12,$13,$14,$15,
+        $16::jsonb,$17::jsonb,$18,$19,$20
       )`,
       [
         id,
@@ -492,7 +554,6 @@ async function main() {
         row.type,
         row.name,
         row.short_description ?? '',
-        row.long_description,
         regFrom,
         regTo,
         row.published_registrations ?? false,

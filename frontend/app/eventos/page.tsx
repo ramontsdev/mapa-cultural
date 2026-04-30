@@ -59,21 +59,30 @@ function parseDayKey(dayKey: string): Date | null {
   return new Date(year, month - 1, day);
 }
 
+function sortEventKeyMs(e: { dataInicio: string; createdAt: string }): number {
+  if (e.dataInicio) {
+    const t = new Date(e.dataInicio).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  const c = new Date(e.createdAt).getTime();
+  return Number.isNaN(c) ? 0 : c;
+}
+
 function compareEventosForSort(
-  a: { dataInicio: string; nome: string },
-  b: { dataInicio: string; nome: string },
+  a: { dataInicio: string; nome: string; createdAt: string },
+  b: { dataInicio: string; nome: string; createdAt: string },
   sortBy: SortEventos,
 ): number {
   switch (sortBy) {
     case "recentes": {
-      const da = new Date(a.dataInicio).getTime();
-      const db = new Date(b.dataInicio).getTime();
+      const da = sortEventKeyMs(a);
+      const db = sortEventKeyMs(b);
       if (da !== db) return db - da;
       return a.nome.localeCompare(b.nome, "pt-BR");
     }
     case "antigos": {
-      const da = new Date(a.dataInicio).getTime();
-      const db = new Date(b.dataInicio).getTime();
+      const da = sortEventKeyMs(a);
+      const db = sortEventKeyMs(b);
       if (da !== db) return da - db;
       return a.nome.localeCompare(b.nome, "pt-BR");
     }
@@ -135,16 +144,23 @@ export default function EventosPage() {
       compareEventosForSort(a, b, sortBy),
     );
     const grupos: Record<string, typeof filteredEventos> = {};
-    const dateOrder: string[] = [];
     sorted.forEach((evento) => {
       const data = toDayKey(evento.dataInicio) || "sem-data";
       if (!grupos[data]) {
         grupos[data] = [];
-        dateOrder.push(data);
       }
       grupos[data].push(evento);
     });
-    return dateOrder.map((data) => [data, grupos[data]] as const);
+    const keys = Object.keys(grupos);
+    const dated = keys.filter((k) => k !== "sem-data").sort((a, b) => {
+      if (sortBy === "antigos") return a.localeCompare(b);
+      return b.localeCompare(a);
+    });
+    const orderedKeys = [
+      ...dated,
+      ...(keys.includes("sem-data") ? (["sem-data"] as const) : []),
+    ];
+    return orderedKeys.map((data) => [data, grupos[data]] as const);
   }, [filteredEventos, sortBy]);
 
   const clearFilters = () => {
@@ -281,7 +297,17 @@ export default function EventosPage() {
                       data !== "sem-data" ? parseDayKey(data) : null;
                     return (
                       <div key={data}>
-                        {parsedDay && (
+                        {data === "sem-data" ? (
+                          <div className="mb-4 flex flex-col gap-1 border-b border-border pb-3">
+                            <span className="text-lg font-semibold capitalize text-foreground">
+                              Data a definir
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              Eventos sem data de realização nas ocorrências ou metadados.
+                            </span>
+                          </div>
+                        ) : null}
+                        {parsedDay ? (
                           <div className="mb-4 flex items-baseline gap-4 border-b border-border pb-3">
                             <div className="flex items-baseline gap-3">
                               <span className="text-4xl font-bold leading-none text-foreground">
@@ -301,7 +327,7 @@ export default function EventosPage() {
                               </div>
                             </div>
                           </div>
-                        )}
+                        ) : null}
 
                         <div className="space-y-4">
                           {eventosData.map((evento) => (
@@ -337,11 +363,18 @@ export default function EventosPage() {
                                     </Link>
 
                                     <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                      {evento.dataInicio && (
+                                      {evento.dataInicio ? (
                                         <span className="flex items-center gap-1">
                                           <CalendarDays className="h-4 w-4" />
-                                          {new Date(evento.dataInicio).toLocaleDateString("pt-BR")}
+                                          {new Date(
+                                            evento.dataInicio,
+                                          ).toLocaleDateString("pt-BR")}
                                           {evento.horario ? ` às ${evento.horario}` : ""}
+                                        </span>
+                                      ) : (
+                                        <span className="flex items-center gap-1 italic">
+                                          <CalendarDays className="h-4 w-4" />
+                                          Data a informar
                                         </span>
                                       )}
                                       {evento.lugar?.nome && (
